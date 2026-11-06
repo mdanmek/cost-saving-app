@@ -171,6 +171,16 @@ def test_page_sample_with_errors_disables_downloads(monkeypatch):
     assert any('Error 3' in e for e in fake.errors)
 
 
+def test_page_stale_result_disables_downloads(monkeypatch):
+    '''Run with the clean sample, then switch the choice without pressing the button again:
+    the old result is still shown but must not be downloadable.'''
+    first = run_page(FakeStreamlit(choice=1), monkeypatch)
+    again = FakeStreamlit(choice=2, button=False)
+    again.session_state = first.session_state
+    run_page(again, monkeypatch)
+    assert len(again.downloads) == 5 and all(d for _, d, _ in again.downloads)
+
+
 def test_page_without_upload_waits(monkeypatch):
     fake = run_page(FakeStreamlit(choice=0), monkeypatch)
     assert fake.downloads == [] and 'run' not in fake.session_state
