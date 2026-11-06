@@ -72,8 +72,10 @@ if st.button('ประมวลผล', type='primary', disabled=not ready):
 run = st.session_state.get('run')
 if run is None:
     st.stop()
-if st.session_state.get('signature') != signature:
-    st.warning('ไฟล์หรือการตั้งค่าเปลี่ยนไปหลังประมวลผลครั้งล่าสุด กด "ประมวลผล" อีกครั้ง ผลด้านล่างเป็นของรอบก่อน')
+stale = st.session_state.get('signature') != signature
+if stale:
+    st.warning('ไฟล์หรือการตั้งค่าเปลี่ยนไปหลังประมวลผลครั้งล่าสุด กด "ประมวลผล" อีกครั้ง ผลด้านล่างเป็นของรอบก่อน '
+               'และปุ่มดาวน์โหลดถูกปิดจนกว่าจะประมวลผลใหม่')
 if run.problem:
     st.error(run.problem)
     st.stop()
@@ -91,23 +93,23 @@ else:
     st.dataframe(check, hide_index=True)
 
 st.subheader('3. Summary')
-s1, s2 = st.columns([2, 3])
-with s1:
-    st.dataframe(webui.summary_for_display(run.result['Summary']), hide_index=True)
-with s2:
-    st.caption('Summary ราย Plant')
-    st.dataframe(run.result['Summary_ByPlant'], hide_index=True)
+st.dataframe(webui.summary_for_display(run.result['Summary']), hide_index=True, height=560)
+st.caption('Summary ราย Plant')
+st.dataframe(run.result['Summary_ByPlant'], hide_index=True)
 with st.expander('Summary_Lines (รายบรรทัด × Plant)'):
     st.dataframe(run.result['Summary_Lines'], hide_index=True)
 
 st.subheader('4. ดาวน์โหลด')
+can_download = run.can_download and not stale
 if not run.can_download:
     st.caption('ปุ่มดาวน์โหลดจะใช้ได้เมื่อ IC_Check ไม่มี Error')
+elif stale:
+    st.caption('ปุ่มดาวน์โหลดจะใช้ได้เมื่อกด "ประมวลผล" กับไฟล์ชุดปัจจุบัน')
 cols = st.columns(len(run.files) + 1)
 for col, (name, data) in zip(cols, run.files.items()):
     col.download_button('for ' + name.rsplit('_for_', 1)[-1].removesuffix('.xlsx'), data=data, file_name=name,
-                        mime=webui.XLSX_MIME, disabled=not run.can_download, key=f'dl_{name}',
+                        mime=webui.XLSX_MIME, disabled=not can_download, key=f'dl_{name}',
                         help=name)
-cols[-1].download_button('ทั้ง 4 ไฟล์ (.zip)', data=webui.zip_files(run.files) if run.can_download else b'',
+cols[-1].download_button('ทั้ง 4 ไฟล์ (.zip)', data=webui.zip_files(run.files) if can_download else b'',
                          file_name='IC_outputs.zip', mime='application/zip',
-                         disabled=not run.can_download, key='dl_zip')
+                         disabled=not can_download, key='dl_zip')
