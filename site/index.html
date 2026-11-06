@@ -8,13 +8,15 @@
       and may connect only to those hosts. So even a bug cannot send an uploaded file anywhere else.
       cdn.jsdelivr.net      stlite, Pyodide and the Pyodide packages (pandas, openpyxl)
       pypi.org, files.pythonhosted.org   micropip, only if a requirement is not in the Pyodide distribution
+      data: in script-src / worker-src: the stlite worker loads its own code with importScripts(data:...)
+      (seen in the browser 2026-11-06). Loading code is allowed; sending data out is still limited by connect-src / img-src.
       If the page stays blank, open the browser console and look for "Content-Security-Policy" errors.
     -->
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self' https://cdn.jsdelivr.net;
-               script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:;
-               worker-src 'self' https://cdn.jsdelivr.net blob:;
+               script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data:;
+               worker-src 'self' https://cdn.jsdelivr.net blob: data:;
                connect-src 'self' https://cdn.jsdelivr.net https://pypi.org https://files.pythonhosted.org blob: data:;
                style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline';
                font-src 'self' https://cdn.jsdelivr.net data:;
