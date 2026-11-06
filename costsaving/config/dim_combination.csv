@@ -1,0 +1,73 @@
+Combination ID,Strategy,Method,PD Action,PD Sheet,is Collect Cost Saving,Combination Name
+A1010,Auction,Bidding,Fix Winner,Update,TRUE,Auction_Bidding_Fix Winner
+A1011,Auction,Bidding,Update Winner,Update,TRUE,Auction_Bidding_Update Winner
+A1022,Auction,Bidding,Add-Fix Winner,Add,TRUE,Auction_Bidding_Add-Fix Winner
+A1042,Auction,Bidding,Inactive Item,No Sale,TRUE,Auction_Bidding_Inactive Item
+A1050,Auction,Bidding,Inactive UOM,No UOM,TRUE,Auction_Bidding_Inactive UOM
+A3510,Auction,Pool Purchase,Fix Winner,Update,TRUE,Auction_Pool Purchase_Fix Winner
+A3511,Auction,Pool Purchase,Update Winner,Update,TRUE,Auction_Pool Purchase_Update Winner
+A3522,Auction,Pool Purchase,Add-Fix Winner,Add,TRUE,Auction_Pool Purchase_Add-Fix Winner
+A3542,Auction,Pool Purchase,Inactive Item,No Sale,TRUE,Auction_Pool Purchase_Inactive Item
+A3550,Auction,Pool Purchase,Inactive UOM,No UOM,TRUE,Auction_Pool Purchase_Inactive UOM
+B1010,Bidding,Bidding,Fix Winner,Update,TRUE,Bidding_Bidding_Fix Winner
+B1011,Bidding,Bidding,Update Winner,Update,TRUE,Bidding_Bidding_Update Winner
+B1022,Bidding,Bidding,Add-Fix Winner,Add,TRUE,Bidding_Bidding_Add-Fix Winner
+B1042,Bidding,Bidding,Inactive Item,No Sale,TRUE,Bidding_Bidding_Inactive Item
+B1050,Bidding,Bidding,Inactive UOM,No UOM,TRUE,Bidding_Bidding_Inactive UOM
+B3510,Bidding,Pool Purchase,Fix Winner,Update,TRUE,Bidding_Pool Purchase_Fix Winner
+B3511,Bidding,Pool Purchase,Update Winner,Update,TRUE,Bidding_Pool Purchase_Update Winner
+B3522,Bidding,Pool Purchase,Add-Fix Winner,Add,TRUE,Bidding_Pool Purchase_Add-Fix Winner
+B3542,Bidding,Pool Purchase,Inactive Item,No Sale,TRUE,Bidding_Pool Purchase_Inactive Item
+B3550,Bidding,Pool Purchase,Inactive UOM,No UOM,TRUE,Bidding_Pool Purchase_Inactive UOM
+C1010,Item Consolidation,Bidding,Fix Winner,Update,TRUE,Item Consolidation_Bidding_Fix Winner
+C1011,Item Consolidation,Bidding,Update Winner,Update,TRUE,Item Consolidation_Bidding_Update Winner
+C1022,Item Consolidation,Bidding,Add-Fix Winner,Add,TRUE,Item Consolidation_Bidding_Add-Fix Winner
+C1042,Item Consolidation,Bidding,Inactive Item,No Sale,TRUE,Item Consolidation_Bidding_Inactive Item
+C1050,Item Consolidation,Bidding,Inactive UOM,No UOM,TRUE,Item Consolidation_Bidding_Inactive UOM
+C3510,Item Consolidation,Pool Purchase,Fix Winner,Update,TRUE,Item Consolidation_Pool Purchase_Fix Winner
+C3511,Item Consolidation,Pool Purchase,Update Winner,Update,TRUE,Item Consolidation_Pool Purchase_Update Winner
+C3522,Item Consolidation,Pool Purchase,Add-Fix Winner,Add,TRUE,Item Consolidation_Pool Purchase_Add-Fix Winner
+C3542,Item Consolidation,Pool Purchase,Inactive Item,No Sale,TRUE,Item Consolidation_Pool Purchase_Inactive Item
+C3550,Item Consolidation,Pool Purchase,Inactive UOM,No UOM,TRUE,Item Consolidation_Pool Purchase_Inactive UOM
+N2012,Negotiation,Special Deal,Update,Update,TRUE,Negotiation_Special Deal_Update
+N3112,Negotiation,Patient Access,Update,Update,TRUE,Negotiation_Patient Access_Update
+N3120,Negotiation,Patient Access,Add UOM,Add,TRUE,Negotiation_Patient Access_Add UOM
+N3130,Negotiation,Patient Access,PD No Setup,No Setup,TRUE,Negotiation_Patient Access_PD No Setup
+N3150,Negotiation,Patient Access,Inactive UOM,No UOM,TRUE,Negotiation_Patient Access_Inactive UOM
+N3212,Negotiation,PPV,Update,Update,TRUE,Negotiation_PPV_Update
+N3220,Negotiation,PPV,Add UOM,Add,TRUE,Negotiation_PPV_Add UOM
+N3221,Negotiation,PPV,Add Vendor,Add,TRUE,Negotiation_PPV_Add Vendor
+N3230,Negotiation,PPV,PD No Setup,No Setup,TRUE,Negotiation_PPV_PD No Setup
+N3240,Negotiation,PPV,Quit,No Sale,FALSE,Negotiation_PPV_Quit
+N3241,Negotiation,PPV,Inactive Vendor,No Sale,FALSE,Negotiation_PPV_Inactive Vendor
+N3242,Negotiation,PPV,Inactive Item,No Sale,TRUE,Negotiation_PPV_Inactive Item
+N3250,Negotiation,PPV,Inactive UOM,No UOM,TRUE,Negotiation_PPV_Inactive UOM
+N3312,Negotiation,Renegotiation,Update,Update,TRUE,Negotiation_Renegotiation_Update
+N3320,Negotiation,Renegotiation,Add UOM,Add,TRUE,Negotiation_Renegotiation_Add UOM
+N3321,Negotiation,Renegotiation,Add Vendor,Add,TRUE,Negotiation_Renegotiation_Add Vendor
+N3330,Negotiation,Renegotiation,PD No Setup,No Setup,TRUE,Negotiation_Renegotiation_PD No Setup
+N3340,Negotiation,Renegotiation,Quit,No Sale,FALSE,Negotiation_Renegotiation_Quit
+N3341,Negotiation,Renegotiation,Inactive Vendor,No Sale,FALSE,Negotiation_Renegotiation_Inactive Vendor
+N3342,Negotiation,Renegotiation,Inactive Item,No Sale,TRUE,Negotiation_Renegotiation_Inactive Item
+N3350,Negotiation,Renegotiation,Inactive UOM,No UOM,TRUE,Negotiation_Renegotiation_Inactive UOM
+N3412,Negotiation,Yearly Contract,Update,Update,TRUE,Negotiation_Yearly Contract_Update
+N3420,Negotiation,Yearly Contract,Add UOM,Add,TRUE,Negotiation_Yearly Contract_Add UOM
+N3421,Negotiation,Yearly Contract,Add Vendor,Add,TRUE,Negotiation_Yearly Contract_Add Vendor
+N3430,Negotiation,Yearly Contract,PD No Setup,No Setup,TRUE,Negotiation_Yearly Contract_PD No Setup
+N3440,Negotiation,Yearly Contract,Quit,No Sale,FALSE,Negotiation_Yearly Contract_Quit
+N3441,Negotiation,Yearly Contract,Inactive Vendor,No Sale,FALSE,Negotiation_Yearly Contract_Inactive Vendor
+N3442,Negotiation,Yearly Contract,Inactive Item,No Sale,TRUE,Negotiation_Yearly Contract_Inactive Item
+N3450,Negotiation,Yearly Contract,Inactive UOM,No UOM,TRUE,Negotiation_Yearly Contract_Inactive UOM
+N3510,Negotiation,Pool Purchase,Fix Winner,Update,TRUE,Negotiation_Pool Purchase_Fix Winner
+N3511,Negotiation,Pool Purchase,Update Winner,Update,TRUE,Negotiation_Pool Purchase_Update Winner
+N3522,Negotiation,Pool Purchase,Add-Fix Winner,Add,TRUE,Negotiation_Pool Purchase_Add-Fix Winner
+N3542,Negotiation,Pool Purchase,Inactive Item,No Sale,TRUE,Negotiation_Pool Purchase_Inactive Item
+N3550,Negotiation,Pool Purchase,Inactive UOM,No UOM,TRUE,Negotiation_Pool Purchase_Inactive UOM
+N3612,Negotiation,Parallel Purchase,Update,Update,TRUE,Negotiation_Parallel Purchase_Update
+N3620,Negotiation,Parallel Purchase,Add UOM,Add,TRUE,Negotiation_Parallel Purchase_Add UOM
+N3621,Negotiation,Parallel Purchase,Add Vendor,Add,TRUE,Negotiation_Parallel Purchase_Add Vendor
+N3630,Negotiation,Parallel Purchase,PD No Setup,No Setup,TRUE,Negotiation_Parallel Purchase_PD No Setup
+N3640,Negotiation,Parallel Purchase,Quit,No Sale,FALSE,Negotiation_Parallel Purchase_Quit
+N3641,Negotiation,Parallel Purchase,Inactive Vendor,No Sale,FALSE,Negotiation_Parallel Purchase_Inactive Vendor
+N3642,Negotiation,Parallel Purchase,Inactive Item,No Sale,TRUE,Negotiation_Parallel Purchase_Inactive Item
+N3650,Negotiation,Parallel Purchase,Inactive UOM,No UOM,TRUE,Negotiation_Parallel Purchase_Inactive UOM

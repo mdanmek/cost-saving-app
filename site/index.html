@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <!--
+      Content-Security-Policy: the page may load code only from itself and the CDN / package index,
+      and may connect only to those hosts. So even a bug cannot send an uploaded file anywhere else.
+      cdn.jsdelivr.net      stlite, Pyodide and the Pyodide packages (pandas, openpyxl)
+      pypi.org, files.pythonhosted.org   micropip, only if a requirement is not in the Pyodide distribution
+      If the page stays blank, open the browser console and look for "Content-Security-Policy" errors.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' https://cdn.jsdelivr.net;
+               script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:;
+               worker-src 'self' https://cdn.jsdelivr.net blob:;
+               connect-src 'self' https://cdn.jsdelivr.net https://pypi.org https://files.pythonhosted.org blob: data:;
+               style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline';
+               font-src 'self' https://cdn.jsdelivr.net data:;
+               img-src 'self' https://cdn.jsdelivr.net data: blob:;
+               frame-src 'self' blob:;
+               form-action 'none'; base-uri 'self'; object-src 'none'"
+    />
+    <title>Cost Saving — IC processor</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/browser@1.10.0/build/stlite.css" />
+    <style>
+      #boot { font-family: system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; line-height: 1.6; color: #333; }
+      #boot code { background: #f2f2f2; padding: 0 .3em; }
+    </style>
+  </head>
+  <body>
+    <div id="boot">
+      <h2>กำลังโหลด Python ในเบราว์เซอร์…</h2>
+      <p>ครั้งแรกใช้เวลาประมาณ 20–60 วินาที เพราะต้องดาวน์โหลด Pyodide, pandas และ openpyxl จาก CDN
+         ครั้งต่อไปเบราว์เซอร์จะใช้ cache</p>
+      <p>ไฟล์ที่อัปโหลดอยู่ในหน่วยความจำของแท็บนี้เท่านั้น ไม่ถูกส่งไป server ใด</p>
+      <p id="boot-error" style="color:#b00020"></p>
+    </div>
+    <div id="root"></div>
+    <script type="module">
+      // pin the stlite version: a new stlite may bring a new Pyodide / pandas (bump it deliberately and re-test).
+      // dynamic import inside try, so a CDN failure shows a message instead of a page that never loads
+      try {
+        const { mount } = await import('https://cdn.jsdelivr.net/npm/@stlite/browser@1.10.0/build/stlite.js');
+        // files.json is written by site/build.py: the list of Python and config files to mount
+        const manifest = await (await fetch('./files.json', { cache: 'no-cache' })).json();
+        const files = {};
+        for (const path of manifest.files) {
+          files[path] = { url: './' + path };
+        }
+        document.getElementById('boot').remove();
+        mount(
+          {
+            entrypoint: manifest.entrypoint,
+            requirements: manifest.requirements,
+            files,
+            streamlitConfig: {
+              'browser.gatherUsageStats': false,
+              'client.toolbarMode': 'viewer',
+              'server.maxUploadSize': 1000,
+            },
+          },
+          document.getElementById('root'),
+        );
+      } catch (err) {
+        document.getElementById('boot-error').textContent =
+          'โหลดไม่สำเร็จ (ตรวจว่าเครือข่ายเข้า cdn.jsdelivr.net ได้): ' + err;
+        console.error(err);
+      }
+    </script>
+  </body>
+</html>

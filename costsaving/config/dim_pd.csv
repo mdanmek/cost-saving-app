@@ -1,0 +1,12 @@
+PD Action ID,PD Action,PD Action Description,PD Sheet,is Collect Cost Saving,Fix Vendor,Needs Contract
+10,Fix Winner,"winner 1: update all, fix vendor",Update,TRUE,TRUE,TRUE
+11,Update Winner,winner 2+: update all,Update,TRUE,FALSE,TRUE
+12,Update,"update price, tmt, foc, vendor mat no, ic no",Update,TRUE,FALSE,TRUE
+20,Add UOM,,Add,TRUE,FALSE,TRUE
+21,Add Vendor,,Add,TRUE,FALSE,TRUE
+22,Add-Fix Winner,"winner 1 that must be added, fix vendor",Add,TRUE,TRUE,TRUE
+30,PD No Setup,,No Setup,TRUE,FALSE,TRUE
+40,Quit,Inactive Vendor & Inactive UOM (note: Quit),No Sale,FALSE,FALSE,FALSE
+41,Inactive Vendor,Inactive Vendor & Inactive UOM (note: No Sale),No Sale,FALSE,FALSE,FALSE
+42,Inactive Item,cancel this material code,No Sale,TRUE,FALSE,FALSE
+50,Inactive UOM,Material and Vendor and UOM,No UOM,TRUE,FALSE,FALSE

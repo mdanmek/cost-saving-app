@@ -1,0 +1,14 @@
+Group,Field,Value
+IC,Template Version,v2.0
+IC,LPP Lookback Months,12
+IC,Default Growth %,0.05
+IC,PPV Warning %,0.5
+IC,Base Price Decimals,2
+IC,Collect Table Name,Input_forSavingCollect
+Contract,Type,Line Item
+Contract,Region,THA
+Contract,ERP System ID,
+Contract,Quantity,999999
+Contract,N/A,N/A
+Contract,Tax Code,[VY] Hospital VAT
+Contract,Item Category,Standard

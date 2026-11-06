@@ -1,0 +1,14 @@
+Strategy,Method
+Auction,Bidding
+Auction,Pool Purchase
+Bidding,Bidding
+Bidding,Pool Purchase
+Item Consolidation,Bidding
+Item Consolidation,Pool Purchase
+Negotiation,Special Deal
+Negotiation,Patient Access
+Negotiation,PPV
+Negotiation,Renegotiation
+Negotiation,Yearly Contract
+Negotiation,Pool Purchase
+Negotiation,Parallel Purchase
