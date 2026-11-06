@@ -1,0 +1,4 @@
+Calc Type,Match Vendor,Match Order Unit,Prorate by Duration,Split by Winner
+All Vendor,FALSE,FALSE,FALSE,TRUE
+By Vendor,TRUE,TRUE,FALSE,FALSE
+By Vendor Period,TRUE,TRUE,TRUE,FALSE

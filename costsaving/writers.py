@@ -1,0 +1,117 @@
+'''Write the IC outputs as Excel files (bytes), so the browser can offer them as downloads.
+
+    for_PD.xlsx        Out_PD, Out_PD_Leadtime          → input of the PD Setup file
+    for_Contract.xlsx  one sheet per Vendor (Ariba)     → Sourcing imports into Ariba
+    for_Collect.xlsx   table Input_forSavingCollect     → appended to the Cost Saving file
+    for_Summary.xlsx   Summary, Summary_ByPlant, Summary_Lines, IC_Check
+'''
+import io
+from datetime import date, datetime
+
+import pandas as pd
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.table import Table, TableStyleInfo
+
+HEADER_FILL = PatternFill('solid', fgColor='1F4E78')
+HEADER_FONT = Font(bold=True, color='FFFFFF')
+PRICE_HINTS = ('Price', 'Saving', 'Gain', 'Loss', 'Margin', 'Value', 'Avoid', 'Amount', 'PPV', 'LPP', 'Baseline')
+
+
+def _cell_value(v):
+    if v is None:
+        return None
+    try:
+        if pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(v, pd.Timestamp):
+        return v.to_pydatetime()
+    if hasattr(v, 'item') and not isinstance(v, (str, bytes)):
+        return v.item()
+    return v
+
+
+def _safe_table_name(name):
+    return ''.join(ch if ch.isalnum() or ch == '_' else '_' for ch in name)[:250]
+
+
+def add_table_sheet(wb, sheet_name, df, table_name=None, text_columns=()):
+    ws = wb.create_sheet(sheet_name[:31])
+    columns = list(df.columns)
+    ws.append(columns)
+    for cell in ws[1]:
+        cell.fill, cell.font = HEADER_FILL, HEADER_FONT
+    for row in df.itertuples(index=False):
+        ws.append([_cell_value(v) for v in row])
+    for i, col in enumerate(columns, 1):
+        letter = get_column_letter(i)
+        ws.column_dimensions[letter].width = min(max(len(str(col)) + 2, 10), 40)
+        for cell in ws[letter][1:]:
+            if isinstance(cell.value, (date, datetime)):
+                cell.number_format = 'yyyy-mm-dd'
+            elif col in text_columns and cell.value is not None:
+                cell.value, cell.number_format = str(cell.value), '@'
+            elif isinstance(cell.value, float) and any(h in col for h in PRICE_HINTS):
+                cell.number_format = '#,##0.00'
+    ws.freeze_panes = 'A2'
+    if columns:
+        last_row = max(ws.max_row, 2)  # an Excel table needs at least one data row
+        ref = f'A1:{get_column_letter(len(columns))}{last_row}'
+        table = Table(displayName=_safe_table_name(table_name or sheet_name), ref=ref)
+        table.tableStyleInfo = TableStyleInfo(name='TableStyleMedium2', showRowStripes=True)
+        ws.add_table(table)
+    return ws
+
+
+def to_bytes(wb):
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def new_workbook():
+    wb = Workbook()
+    wb.remove(wb.active)
+    return wb
+
+
+TEXT_CODES = ('Material Code', 'Vendor ID', 'Plant', 'Spend Plant', 'Item ID', 'Material Number', 'PO Number',
+              'LPP PO Number', 'Reference Material Code')
+
+
+def write_for_pd(result):
+    wb = new_workbook()
+    add_table_sheet(wb, 'Out_PD', result['Out_PD'], 'Out_PD', TEXT_CODES)
+    add_table_sheet(wb, 'Out_PD_Leadtime', result['Out_PD_Leadtime'], 'Out_PD_Leadtime', TEXT_CODES)
+    return to_bytes(wb)
+
+
+def write_for_contract(result):
+    '''One sheet per Vendor: one Ariba contract per Vendor (C1). The Vendor ID column is not part of the import.'''
+    wb = new_workbook()
+    df = result['Out_Contract']
+    if df.empty:
+        add_table_sheet(wb, 'Contract', df.drop(columns=['Vendor ID']), 'Contract')
+    for i, (vendor, part) in enumerate(df.groupby('Vendor ID', sort=True), 1):
+        part = part.drop(columns=['Vendor ID']).copy()
+        part['Item Number'] = range(1, len(part) + 1)
+        add_table_sheet(wb, f'Contract_{vendor}', part, f'Contract_{i}', TEXT_CODES)
+    return to_bytes(wb)
+
+
+def write_for_collect(result, table_name):
+    wb = new_workbook()
+    add_table_sheet(wb, 'forSavingCollect', result['Out_Collect'], table_name, TEXT_CODES)
+    return to_bytes(wb)
+
+
+def write_for_summary(result):
+    wb = new_workbook()
+    add_table_sheet(wb, 'Summary', result['Summary'], 'Summary')
+    add_table_sheet(wb, 'Summary_ByPlant', result['Summary_ByPlant'], 'Summary_ByPlant', TEXT_CODES)
+    add_table_sheet(wb, 'Summary_Lines', result['Summary_Lines'], 'Summary_Lines', TEXT_CODES)
+    add_table_sheet(wb, 'IC_Check', result['IC_Check'], 'IC_Check', TEXT_CODES)
+    return to_bytes(wb)
