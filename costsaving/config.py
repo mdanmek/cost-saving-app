@@ -15,7 +15,7 @@ import pandas as pd
 CONFIG_DIR = Path(__file__).parent / 'config'
 
 BOOL_COLUMNS = {
-    'dim_method': ['Uses Transfer Price'],
+    'dim_method': ['Uses Transfer Price', 'is CT'],
     'dim_calc_type': ['Match Vendor', 'Match Order Unit', 'Prorate by Duration', 'Split by Winner'],
     'dim_pd': ['is Collect Cost Saving', 'Fix Vendor', 'Needs Contract'],
     'dim_combination': ['is Collect Cost Saving'],

@@ -47,7 +47,7 @@ def test_row_counts(run):
     counts = {k: len(result[k]) for k in
               ('agreement_line', 'Out_PD', 'Out_Contract', 'Out_Collect', 'Summary_Lines', 'Out_PD_Leadtime')}
     assert counts == {'agreement_line': 12, 'Out_PD': 12, 'Out_Contract': 11, 'Out_Collect': 10,
-                      'Summary_Lines': 11, 'Out_PD_Leadtime': 2}
+                      'Summary_Lines': 11, 'Out_PD_Leadtime': 0}  # Renegotiation is not CT (D56)
 
 
 # ---------------------------------------------------------------- Baseline (D11, D13, D14, P4)
@@ -117,11 +117,13 @@ def test_pd_action_not_collected_has_no_contract(run):
 # ---------------------------------------------------------------- Check codes (template-spec section 7)
 def test_check_codes(run):
     check = run[0]['IC_Check']
-    got = {(r['Level'], r['Message'][:3], r['Line No']) for _, r in check.iterrows() if r['Message'][:1] in 'EW' and r['Message'][1:3].isdigit()}
+    got = {(r['Level'], r['Message'][:3], None if pd.isna(r['Line No']) else r['Line No'])
+           for _, r in check.iterrows() if r['Message'][:1] in 'EW' and r['Message'][1:3].isdigit()}
     expected = {
         ('Error', 'E10', 7), ('Error', 'E02', 8), ('Error', 'E04', 9),
         ('Warning', 'W01', 3), ('Warning', 'W01', 5), ('Warning', 'W01', 8),
         ('Warning', 'W02', 4), ('Warning', 'W02', 9), ('Warning', 'W07', 4), ('Warning', 'W08', 8),
+        ('Warning', 'W10', None),  # CT_Leadtime filled but Renegotiation is not CT (D56)
     }
     assert got == expected
     # file-level reminder, shown once (not once per line)
@@ -151,7 +153,7 @@ def test_out_pd_columns(run):
 # ---------------------------------------------------------------- files
 def test_output_files(run):
     _, files = run
-    assert sorted(n.split('_for_')[1] for n in files) == ['Collect.xlsx', 'Contract.xlsx', 'PD.xlsx', 'Summary.xlsx']
+    assert sorted(n.rsplit('_', 1)[1] for n in files) == ['Collect.xlsx', 'Contract.xlsx', 'Processed.xlsx', 'Summary.xlsx']
     collect = next(v for k, v in files.items() if k.endswith('_for_Collect.xlsx'))
     wb = load_workbook(fx.as_file(collect))
     table_name = load_config().const('IC', 'Collect Table Name')
@@ -180,3 +182,22 @@ def test_pool_purchase_uses_transfer_price():
     assert sl['Hospital Saving'].sum() == pytest.approx((0.95 - 0.90) * 3600)
     assert sl['Group Margin'].sum() == pytest.approx((0.90 - 0.80) * 3600)
     assert not any(result['IC_Check']['Level'] == 'Error')
+
+
+# ---------------------------------------------------------------- CT_Leadtime only for CT (D56)
+def ct_header():
+    return [(f, {'Method': 'Yearly Contract'}.get(f, v)) for f, v in fx.HEADER]
+
+
+def test_ct_method_passes_leadtime_to_pd():
+    result, _ = process_ic(fx.as_file(fx.ic_workbook_bytes(header=ct_header())), po_files=[fx.as_file(fx.po_csv_bytes())])
+    assert len(result['Out_PD_Leadtime']) == 2
+    assert not result['IC_Check']['Message'].str[:3].isin(['W09', 'W10']).any()
+
+
+def test_ct_method_without_leadtime_warns(monkeypatch):
+    from costsaving import sample
+    monkeypatch.setattr(sample, 'LEADTIME', [])
+    result, _ = process_ic(fx.as_file(fx.ic_workbook_bytes(header=ct_header())), po_files=[fx.as_file(fx.po_csv_bytes())])
+    assert len(result['Out_PD_Leadtime']) == 0
+    assert result['IC_Check']['Message'].str.startswith('W09').any()

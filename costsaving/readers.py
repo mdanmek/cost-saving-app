@@ -72,6 +72,15 @@ def read_masterinfo(workbook):
                           dropna=False, sort=False)
                  .agg(**{'FOC': ('FOC', 'first'), 'Order Unit Price': ('Order Unit Price', 'min')})
                  .reset_index())
+    return normalize_masterinfo(df)
+
+
+def normalize_masterinfo(df):
+    '''Codes as text, price as number, one row per Material × Vendor × Order Unit.'''
+    df = df.copy()
+    for col in ['Material Code', 'Material Description', 'Vendor ID', 'Vendor Name', 'MFG', 'Order Unit', 'FOC', 'Order Unit Price']:
+        if col not in df:
+            df[col] = None
     for col in ['Material Code', 'Vendor ID', 'Order Unit', 'FOC']:
         df[col] = df[col].map(to_text)
     df['Order Unit Price'] = df['Order Unit Price'].map(to_number)

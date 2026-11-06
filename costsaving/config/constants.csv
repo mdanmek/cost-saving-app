@@ -1,10 +1,12 @@
 Group,Field,Value
-IC,Template Version,v2.0
+IC,Template Version,v2.1
 IC,LPP Lookback Months,12
 IC,Default Growth %,0.05
 IC,PPV Warning %,0.5
 IC,Base Price Decimals,2
 IC,Collect Table Name,Input_forSavingCollect
+Package,Max Age Days,45
+Package,Spending Months,13
 Contract,Type,Line Item
 Contract,Region,THA
 Contract,ERP System ID,

@@ -1,6 +1,6 @@
 '''Write the IC outputs as Excel files (bytes), so the browser can offer them as downloads.
 
-    for_PD.xlsx        Out_PD, Out_PD_Leadtime          → input of the PD Setup file
+    IC_Processed.xlsx  Processed (checksum), Header, Lines, Out_PD, ...  → SharePoint → PD mode
     for_Contract.xlsx  one sheet per Vendor (Ariba)     → Sourcing imports into Ariba
     for_Collect.xlsx   table Input_forSavingCollect     → appended to the Cost Saving file
     for_Summary.xlsx   Summary, Summary_ByPlant, Summary_Lines, IC_Check
@@ -82,10 +82,21 @@ TEXT_CODES = ('Material Code', 'Vendor ID', 'Plant', 'Spend Plant', 'Item ID', '
               'LPP PO Number', 'Reference Material Code')
 
 
-def write_for_pd(result):
+def write_processed(result, inputs, stamp):
+    '''The file Sourcing submits in SharePoint, and PD later processes (D56):
+    what was keyed (Header, Lines, CT_Leadtime, dimPlantGroup) + Out_PD + the stamp with the checksum.
+    The data package is not copied: PD does not need the spending, and the file stays small.'''
     wb = new_workbook()
+    add_table_sheet(wb, 'Processed', pd.DataFrame(stamp, columns=['Field', 'Value']), 'Processed')
+    add_table_sheet(wb, 'Header', pd.DataFrame(list(inputs.header.items()), columns=['Field', 'Value']), 'Header')
+    add_table_sheet(wb, 'Lines', inputs.lines, 'Lines', TEXT_CODES + ('Order Unit', 'Final FOC', 'Nego FOC'))
+    if inputs.leadtime is not None and not inputs.leadtime.empty:
+        add_table_sheet(wb, 'CT_Leadtime', inputs.leadtime, 'CT_Leadtime', TEXT_CODES)
+    if inputs.plant_group is not None:
+        add_table_sheet(wb, 'dimPlantGroup', inputs.plant_group, 'dimPlantGroup')
     add_table_sheet(wb, 'Out_PD', result['Out_PD'], 'Out_PD', TEXT_CODES)
     add_table_sheet(wb, 'Out_PD_Leadtime', result['Out_PD_Leadtime'], 'Out_PD_Leadtime', TEXT_CODES)
+    add_table_sheet(wb, 'IC_Check', result['IC_Check'], 'IC_Check', TEXT_CODES)
     return to_bytes(wb)
 
 
