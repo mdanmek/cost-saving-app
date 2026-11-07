@@ -51,7 +51,8 @@ def test_error_lines_are_still_found_with_a_one_commodity_package():
 def test_blank_template_layout():
     wb = load_workbook(io.BytesIO(sample.template_bytes(blank=True)))
     assert wb.sheetnames[:5] == ['README', 'Header', 'Lines', 'CT_Leadtime', 'dimPlantGroup']
-    assert {'Package_Info', 'dimMasterInfo_Raw', 'dimUOM_Raw', 'dimPlant_Raw', 'fact_po_lines', 'dimMaterial', 'lists'} <= set(wb.sheetnames)
+    assert {'Package_Info', 'dimMasterInfo_Raw', 'dimUOM_Raw', 'dimPlant_Raw', 'fact_po_lines', 'dimMaterial',
+            'dimPlantGroup_Official', 'lists'} <= set(wb.sheetnames)
     assert wb['lists'].sheet_state == 'hidden'
     for name in ('Header', 'Lines', 'CT_Leadtime', 'dimPlantGroup', 'fact_po_lines'):
         assert name in wb[name].tables, name
@@ -98,6 +99,45 @@ def test_commodity_must_match_package_p03():
 
 
 # ---------------------------------------------------------------- Plant Group keyed by Sourcing (D56)
+def test_official_group_changed_is_an_error_p04():
+    '''Sourcing may add groups but not change the data team's groups (D57).'''
+    keyed = pd.DataFrame(sample.PLANT_GROUP, columns=['Plant Group', 'Plant List', 'Count'])
+    name = keyed.loc[0, 'Plant Group']
+    changed = keyed.copy()
+    changed.loc[0, 'Plant List'] = 'TH1'
+    added = pd.concat([keyed, pd.DataFrame([('MY GROUP', 'T101', 1)], columns=keyed.columns)], ignore_index=True)
+    reordered = keyed.copy()
+    reordered.loc[0, 'Plant List'] = ', '.join(reversed([p.strip() for p in str(keyed.loc[0, 'Plant List']).split(',')]))
+
+    def p04(plant_group):
+        inputs = process_ic(sample.template_bytes(lines=CLEAN))[0]['inputs']
+        inputs.plant_group = plant_group
+        from costsaving.ic import changed_official_groups
+        return changed_official_groups(inputs)
+    assert p04(changed) == [name]
+    assert p04(added) == [] and p04(reordered) == []
+
+
+def test_official_group_check_runs_in_the_pipeline(monkeypatch):
+    m = sample.master_frames()
+    official = m['plant_group']
+    keyed = official.copy()
+    keyed.loc[0, 'Plant List'] = 'TH1'
+    data, _ = build_template(load_config(), m['masterinfo'], m['uom'], m['plant'], official,
+                             normalize_po_lines(sample.po_df()), 'Medicine', header=sample.HEADER, lines=sample.lines_df(CLEAN))
+    from costsaving import template as tpl
+    real = tpl.read_template
+
+    def edited(source):
+        t = real(source)
+        t['plant_group'] = keyed
+        return t
+    monkeypatch.setattr('costsaving.pipeline.read_template', edited)
+    result, _ = process_ic(data)
+    p04 = result['IC_Check'][result['IC_Check']['Message'].str.startswith('P04')]
+    assert len(p04) == 1 and p04['Level'].iloc[0] == 'Error'
+
+
 def test_plant_list_accepts_codes_or_names():
     def run(plant_list):
         m = sample.master_frames()
@@ -118,7 +158,8 @@ def test_processed_file_has_inputs_out_pd_and_checksum():
     result, files = process_ic(sample.template_bytes(lines=CLEAN))
     data = next(v for k, v in files.items() if k.endswith('_IC_Processed.xlsx'))
     wb = load_workbook(io.BytesIO(data))
-    assert {'Processed', 'Header', 'Lines', 'Out_PD', 'Out_PD_Leadtime', 'IC_Check', 'dimPlantGroup'} <= set(wb.sheetnames)
+    assert {'Processed', 'Summary', 'Header', 'Lines', 'forSavingCollect', 'Out_PD', 'Out_PD_Leadtime', 'Out_Contract',
+            'IC_Check', 'dimPlantGroup'} <= set(wb.sheetnames)
     assert 'fact_po_lines' not in wb.sheetnames  # the package is not copied
     s = stamp(files)
     assert s['Package Version'] == 'MED-20261106' and len(s['Input Checksum (SHA-256)']) == 64

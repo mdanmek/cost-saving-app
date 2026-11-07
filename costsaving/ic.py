@@ -102,6 +102,7 @@ class ICInputs:
     leadtime: pd.DataFrame = None
     package: dict = None   # Package_Info of the template (D56); None for files without a package
     material_commodity: dict = None  # dimMaterial of the package: Material → Commodity (all commodities)
+    official_plant_group: pd.DataFrame = None  # data team's groups in the package (D57: names locked)
 
 
 # ---------------------------------------------------------------- small helpers
@@ -363,6 +364,26 @@ def out_pd(lines):
     return pd.DataFrame([{c: r.get(c) for c in OUT_PD_COLUMNS} for r in lines], columns=OUT_PD_COLUMNS)
 
 
+def plant_set(plant_list, plant):
+    '''Plant List text → set of Plant codes (codes or names accepted; unknown names kept as text).'''
+    by_code = {to_text(r['Plant']): to_text(r['Plant']) for r in records(plant)}
+    by_name = {to_text(r['Plant Name']): to_text(r['Plant']) for r in records(plant)}
+    items = [n.strip() for n in (to_text(plant_list) or '').split(',') if n.strip()]
+    return frozenset(by_code.get(n) or by_name.get(n) or n for n in items)
+
+
+def changed_official_groups(inputs):
+    '''Groups whose name is in the data team's copy but whose plants differ (D57).'''
+    official = {to_text(r['Plant Group']): plant_set(r.get('Plant List'), inputs.plant)
+                for r in records(inputs.official_plant_group) if to_text(r.get('Plant Group'))}
+    keyed = {}
+    for r in records(inputs.plant_group):
+        name = to_text(r.get('Plant Group'))
+        if name:
+            keyed.setdefault(name, []).append(plant_set(r.get('Plant List'), inputs.plant))
+    return sorted(n for n, sets in keyed.items() if n in official and any(s != official[n] for s in sets))
+
+
 def is_ct(header, cfg: Config):
     '''CT_Leadtime is used only for a CT Method, as in the current file (D56): dim_method.is CT.'''
     flags = {r['Method']: r['is CT'] for r in records(cfg.dim_method)}
@@ -620,6 +641,10 @@ def build_check(lines, contract_rows, header, cfg: Config, inputs=None):
                 f"เก่ากว่า Key Date เกิน {int(cfg.const_number('Package', 'Max Age Days'))} วัน ขอ template รุ่นใหม่จากทีมข้อมูล")
         if key_date and p_from and add_months(key_date, -int(cfg.const_number('IC', 'LPP Lookback Months'))) < p_from:
             add('Warning', 'Package', f"P02 spending ในแพ็กเกจเริ่ม {p_from:%Y-%m-%d} ไม่ครบ 12 เดือนก่อน Key Date: LPP และ Summary อาจขาดบางส่วน")
+    if inputs is not None and inputs.official_plant_group is not None and inputs.plant_group is not None:
+        for name in changed_official_groups(inputs):
+            add('Error', 'dimPlantGroup', f'P04 กลุ่ม {name} ถูกแก้ Plant List ต่างจากกลุ่มของทีมข้อมูล '
+                'ถ้าต้องการชุด Plant อื่นให้เพิ่มกลุ่มใหม่ชื่ออื่น แล้วคืนค่ากลุ่มนี้ตาม template')
     if inputs is not None:
         ct, lt = is_ct(header, cfg), leadtime_rows(inputs)
         if ct and not lt:

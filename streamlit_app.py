@@ -117,20 +117,17 @@ def sourcing():
         st.dataframe(run.result['Summary_Lines'], hide_index=True)
 
     st.subheader('4. ดาวน์โหลด')
-    st.caption('IC Processed ใช้ยื่นใน SharePoint ให้ manager approve และ PD ใช้ต่อ · for Contract นำเข้า Ariba · '
-               'for Collect ส่งเข้าไฟล์ Cost Saving · for Summary ใช้ดูและแนบประกอบ')
+    st.caption('**IC Processed** คือไฟล์เดียวที่ยื่นใน SharePoint (IC Request) มี Summary, ตาราง Collect สำหรับไฟล์ '
+               'Cost Saving และ Out_PD สำหรับ PD อยู่ในตัว · **for Contract** ใช้ import เข้า Ariba หลัง approve')
     can_download = run.can_download and not stale
     if not run.can_download:
         st.caption('ปุ่มดาวน์โหลดจะใช้ได้เมื่อ IC_Check ไม่มี Error')
     elif stale:
         st.caption('ปุ่มดาวน์โหลดจะใช้ได้เมื่อกด "ประมวลผล" กับไฟล์ชุดปัจจุบัน')
-    cols = st.columns(len(run.files) + 1)
+    cols = st.columns(len(run.files))
     for col, (name, data) in zip(cols, run.files.items()):
         col.download_button(webui.file_label(name), data=data, file_name=name, mime=webui.XLSX_MIME,
                             disabled=not can_download, key=f'dl_{name}', help=name)
-    cols[-1].download_button('ทั้ง 4 ไฟล์ (.zip)', data=webui.zip_files(run.files) if can_download else b'',
-                             file_name='IC_outputs.zip', mime='application/zip',
-                             disabled=not can_download, key='dl_zip')
 
 
 # ---------------------------------------------------------------- data team
@@ -162,6 +159,23 @@ def data_team():
                 None if use_sample else master_up.getvalue(),
                 [] if use_sample else [f.getvalue() for f in po_up],
                 commodity, spend_from, spend_to, sample_data=use_sample)
+    with st.expander('ทดสอบความเร็วด้วยข้อมูลสมมติขนาดจริง'):
+        st.caption('สร้าง template ที่มี PO line สมมติตามจำนวนที่เลือก แล้วประมวลผลเหมือน Sourcing เพื่อดูว่าเครื่องนี้ใช้เวลาเท่าไร '
+                   'เกณฑ์ที่ตั้งไว้: ประมวลผลไม่เกิน 2 นาที')
+        n_rows = st.select_slider('จำนวน PO line', options=[10_000, 40_000, 80_000, 160_000, 240_000], value=160_000)
+        if st.button('เริ่มทดสอบ'):
+            bar = st.progress(0.0)
+            with st.spinner('กำลังทดสอบ... อาจใช้เวลาหลายนาที'):
+                timings, size_mb, n, problem = webui.benchmark(n_rows, progress=bar.progress)
+            st.session_state['bench'] = (timings, size_mb, n, problem)
+        if 'bench' in st.session_state:
+            timings, size_mb, n, problem = st.session_state['bench']
+            if problem:
+                st.error(problem)
+            st.dataframe([{'ขั้น': k, 'วินาที': round(v, 1)} for k, v in timings] +
+                         [{'ขั้น': f'ขนาด template ({n:,} PO lines)', 'วินาที': None}], hide_index=True)
+            st.caption(f'ขนาดไฟล์ {size_mb:.1f} MB')
+
     build = st.session_state.get('build')
     if build is None:
         st.stop()

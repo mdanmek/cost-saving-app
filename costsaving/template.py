@@ -16,6 +16,7 @@ it, keys Header / Lines (+ CT_Leadtime for CT, + their own Plant Groups), and th
     dimUOM_Raw          data team           Order Unit → Base Unit, Conversion
     dimPlant_Raw        data team           Plant → Plant Name, Group
     fact_po_lines       data team           PO lines of the commodity in the spending window
+    dimPlantGroup_Official data team        copy of the data team's groups: these names cannot be changed (D57)
     dimMaterial         data team           Material → Commodity, from the PO lines of every commodity
                                             (E10: a Medical Supply item keyed in a Medicine file)
     lists               (hidden)            dropdown values from config
@@ -201,8 +202,8 @@ def build_template(cfg: Config, masterinfo, uom, plant, plant_group, po, commodi
         'Template IC — คีย์ Header และ Lines แล้วอัปโหลดไฟล์นี้ทั้งไฟล์ที่ https://mdanmek.github.io/cost-saving-app/',
         'ห้ามแก้ชื่อชีต ชื่อคอลัมน์ หรือลบแถวหัวตาราง ทุกตารางต้องเริ่มที่เซลล์ A1',
         'CT_Leadtime: กรอกเฉพาะ Method ที่เป็น CT (ไฟล์อื่นเว้นว่าง)',
-        'dimPlantGroup: เพิ่มกลุ่มเองได้ Plant List = รหัสหรือชื่อ Plant คั่นด้วย , แล้วใส่ชื่อกลุ่มที่ Plant Group ใน Header หรือ Lines',
-        'Package_Info, dimMasterInfo_Raw, dimUOM_Raw, dimPlant_Raw, fact_po_lines, dimMaterial เป็นข้อมูลที่ทีมข้อมูลควบคุม ห้ามแก้',
+        'dimPlantGroup: เพิ่มกลุ่มใหม่ได้ (Plant List = รหัสหรือชื่อ Plant คั่นด้วย ,) แต่ห้ามแก้กลุ่มที่ทีมข้อมูลตั้งไว้ ถ้าต้องการชุด Plant อื่นให้ตั้งชื่อกลุ่มใหม่',
+        'Package_Info, dimMasterInfo_Raw, dimUOM_Raw, dimPlant_Raw, fact_po_lines, dimMaterial, dimPlantGroup_Official เป็นข้อมูลที่ทีมข้อมูลควบคุม ห้ามแก้',
         f"Package {info['Package Version']} · spending {spend_from:%Y-%m-%d} ถึง {spend_to:%Y-%m-%d} · {info['Spending Rows']:,} PO lines",
     ]:
         readme.append([text])
@@ -231,6 +232,8 @@ def build_template(cfg: Config, masterinfo, uom, plant, plant_group, po, commodi
     _table_sheet(wb, 'dimPlant_Raw', PLANT_COLUMNS, plant.reindex(columns=PLANT_COLUMNS).itertuples(index=False))
     _table_sheet(wb, PO_SHEET, PACKAGE_PO_COLUMNS, po_pkg.itertuples(index=False))
     _table_sheet(wb, 'dimMaterial', MATERIAL_COLUMNS, material_commodity(po).itertuples(index=False))
+    _table_sheet(wb, 'dimPlantGroup_Official', PLANT_GROUP_COLUMNS,
+                 [[r.get(c) for c in PLANT_GROUP_COLUMNS] for r in plant_group.to_dict('records')], widths={'Plant List': 80})
     _table_sheet(wb, 'lists', list(lists), list_rows, hidden=True)
 
     buf = io.BytesIO()
@@ -329,6 +332,7 @@ def read_template(source):
             'lines': lines,
             'leadtime': read_sheet(wb, 'CT_Leadtime', required=False),
             'plant_group': read_sheet(wb, 'dimPlantGroup'),
+            'official_plant_group': read_sheet(wb, 'dimPlantGroup_Official', required=False),
             'masterinfo': normalize_masterinfo(read_sheet(wb, 'dimMasterInfo_Raw')),
             'uom': read_sheet(wb, 'dimUOM_Raw'),
             'plant': plant,

@@ -86,7 +86,8 @@ def load_template_inputs(ic_bytes, po_files=(), master_file=None):
     t = read_template(ic_bytes)
     inputs = ICInputs(header=t['header'], lines=t['lines'], masterinfo=t['masterinfo'], uom=t['uom'],
                       plant=t['plant'], plant_group=t['plant_group'], po_lines=t['po_lines'],
-                      leadtime=t['leadtime'], package=t['package'], material_commodity=t['material_commodity'])
+                      leadtime=t['leadtime'], package=t['package'], material_commodity=t['material_commodity'],
+                      official_plant_group=t['official_plant_group'])
     if master_file is not None:
         wb = open_workbook(master_file)
         inputs.masterinfo = read_masterinfo(wb)
@@ -127,14 +128,13 @@ def processed_stamp(inputs, cfg, processed_at=None):
 
 
 def output_files(result, cfg, inputs, processed_at=None):
-    '''IC_Processed goes to SharePoint for approval and later to PD; Contract → Ariba; Collect → Cost Saving.'''
+    '''IC_Processed = the one file submitted in SharePoint (D57); for_Contract = Ariba import.'''
     project_name = to_text(inputs.header.get('Project Name'))
     stem = ''.join(ch if ch.isalnum() or ch in '-_ ' else '_' for ch in (project_name or 'IC')).strip().replace(' ', '_')
     return {
-        f'{stem}_IC_Processed.xlsx': writers.write_processed(result, inputs, processed_stamp(inputs, cfg, processed_at)),
+        f'{stem}_IC_Processed.xlsx': writers.write_processed(result, inputs, processed_stamp(inputs, cfg, processed_at),
+                                                             cfg.const('IC', 'Collect Table Name')),
         f'{stem}_for_Contract.xlsx': writers.write_for_contract(result),
-        f'{stem}_for_Collect.xlsx': writers.write_for_collect(result, cfg.const('IC', 'Collect Table Name')),
-        f'{stem}_for_Summary.xlsx': writers.write_for_summary(result),
     }
 
 

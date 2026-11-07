@@ -153,11 +153,14 @@ def test_out_pd_columns(run):
 # ---------------------------------------------------------------- files
 def test_output_files(run):
     _, files = run
-    assert sorted(n.rsplit('_', 1)[1] for n in files) == ['Collect.xlsx', 'Contract.xlsx', 'Processed.xlsx', 'Summary.xlsx']
-    collect = next(v for k, v in files.items() if k.endswith('_for_Collect.xlsx'))
-    wb = load_workbook(fx.as_file(collect))
+    assert sorted(n.rsplit('_', 1)[1] for n in files) == ['Contract.xlsx', 'Processed.xlsx']
+    processed = next(v for k, v in files.items() if k.endswith('_IC_Processed.xlsx'))
+    wb = load_workbook(fx.as_file(processed))
     table_name = load_config().const('IC', 'Collect Table Name')
-    assert table_name in wb['forSavingCollect'].tables
+    assert table_name in wb['forSavingCollect'].tables  # the Project file finds the table in the submitted file (D57)
+    rows = list(wb['forSavingCollect'].iter_rows(values_only=True))
+    assert list(rows[0]) == list(run[0]['Out_Collect'].columns) and len(rows) - 1 == len(run[0]['Out_Collect'])
+    assert {'Processed', 'Summary', 'IC_Check', 'Out_PD', 'Out_Contract', 'Summary_Lines'} <= set(wb.sheetnames)
     contract = next(v for k, v in files.items() if k.endswith('_for_Contract.xlsx'))
     sheets = load_workbook(fx.as_file(contract)).sheetnames
     assert sheets == ['Contract_T900000001', 'Contract_T900000002']  # one contract per vendor
