@@ -2,7 +2,7 @@
 
     uploads (bytes) ──▶ run_uploads ──▶ RunResult
                                          ├─ result   tables (IC_Check, Summary, ...)
-                                         ├─ files    {file name: xlsx bytes}  (the 4 downloads)
+                                         ├─ files    {file name: xlsx bytes}  (IC Processed, for Contract)
                                          ├─ errors / warnings  counts from IC_Check
                                          └─ problem  text when the input could not be read
 
@@ -11,12 +11,13 @@ inputs and outputs are bytes in memory.
 '''
 from dataclasses import dataclass, field
 import io
-import zipfile
 
 import pandas as pd
 
 from .config import load_config
 from .pipeline import process_ic
+from .readers import normalize_po_lines, open_workbook, read_masterinfo, read_po_lines, read_table
+from .template import build_template
 from . import sample
 
 LEVEL_ORDER = {'Error': 0, 'Warning': 1}
@@ -52,7 +53,7 @@ def run_uploads(ic_bytes, po_bytes_list=(), master_bytes=None, erp_system_id=Non
     try:
         cfg = make_config(erp_system_id)
         result, files = process_ic(
-            io.BytesIO(ic_bytes),
+            ic_bytes,
             po_files=[io.BytesIO(b) for b in po_bytes_list if b],
             master_file=io.BytesIO(master_bytes) if master_bytes else None,
             cfg=cfg,
@@ -101,23 +102,93 @@ def summary_for_display(summary):
     return out
 
 
-def zip_files(files):
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
-        for name, data in files.items():
-            z.writestr(name, data)
-    return buf.getvalue()
-
-
 SAMPLE_ERROR_LINES = {7, 8, 9}  # E10 commodity, E02 Order Unit, E04 FOC in costsaving/sample.py
 
 
 def sample_inputs(with_errors=False):
-    '''Fictitious files (costsaving/sample.py) to try the page: (ic, [po csv], master).
+    '''Fictitious template with data package (costsaving/sample.py) to try the page: (template, [], None).
     with_errors=False drops the lines that are wrong on purpose, so the downloads can be tried.'''
     lines = sample.LINES if with_errors else [x for x in sample.LINES if x['line'] not in SAMPLE_ERROR_LINES]
-    return (sample.ic_workbook_bytes(lines=lines, with_masters=False), [sample.po_csv_bytes()],
-            sample.master_workbook_bytes())
+    return sample.template_bytes(lines=lines), [], None
+
+
+def file_label(name):
+    '''Download button label from the output file name.'''
+    if name.endswith('_IC_Processed.xlsx'):
+        return 'IC Processed (ไฟล์ยื่น SharePoint)'
+    return 'for ' + name.rsplit('_for_', 1)[-1].removesuffix('.xlsx')
+
+
+# ---------------------------------------------------------------- data team: build the template + package
+@dataclass
+class BuildResult:
+    data: bytes = b''
+    file_name: str = ''
+    info: dict = field(default_factory=dict)
+    problem: str | None = None
+
+
+def run_build(master_bytes, po_bytes_list, commodity, spend_from=None, spend_to=None, sample_data=False):
+    '''Master workbook (dimMasterInfo_Raw or MasterInfo_ActiveTH, dimUOM_Raw, dimPlant_Raw, dimPlantGroup)
+    + PO-line CSVs → blank template with the data package of one commodity.'''
+    try:
+        cfg = load_config()
+        if sample_data:
+            m = sample.master_frames()
+            masterinfo, uom, plant, plant_group = m['masterinfo'], m['uom'], m['plant'], m['plant_group']
+            po = normalize_po_lines(sample.po_df())
+        else:
+            if not master_bytes:
+                return BuildResult(problem='ยังไม่ได้อัปโหลดไฟล์ master')
+            if not any(po_bytes_list):
+                return BuildResult(problem='ยังไม่ได้อัปโหลด CSV PO line')
+            wb = open_workbook(master_bytes)
+            masterinfo = read_masterinfo(wb)
+            uom, plant, plant_group = (read_table(wb, n) for n in ('dimUOM_Raw', 'dimPlant_Raw', 'dimPlantGroup'))
+            po = read_po_lines([io.BytesIO(b) for b in po_bytes_list if b])
+        data, info = build_template(cfg, masterinfo, uom, plant, plant_group, po, commodity, spend_from, spend_to)
+    except KeyError as e:
+        return BuildResult(problem=str(e).strip("'\""))
+    except Exception as e:  # noqa: BLE001
+        return BuildResult(problem=f'สร้าง template ไม่สำเร็จ: {type(e).__name__}: {e}')
+    code = info['Package Version']
+    return BuildResult(data=data, file_name=f'IC_Template_{code}.xlsx', info=info)
+
+
+def benchmark(n_rows=160_000, progress=None):
+    '''Speed test on fictitious data: a package with n_rows PO lines (≈ one commodity-year) is built,
+    then processed like a keyed template. Returns [(step, seconds)] and the template size in MB.'''
+    import random
+    import time
+    from datetime import date, timedelta
+    cfg = load_config()
+    rng = random.Random(1)
+    base = sample.po_df()
+    d0 = date(2025, 11, 7)
+    rows = [['01_Medicine', f'T1{i % 40:02d}', f'TH{i % 40}', f'46{i:08d}', (d0 + timedelta(days=i % 364)).isoformat(),
+             f'TST-X{i % 8000:05d}', f'T9{i % 300:08d}', 'BX10T', 'TAB', rng.randint(1, 500), round(rng.random() * 10000, 2)]
+            for i in range(n_rows)]
+    po = normalize_po_lines(pd.concat([base, pd.DataFrame(rows, columns=base.columns)], ignore_index=True))
+    m = sample.master_frames()
+    lines = sample.lines_df([x for x in sample.LINES if x['line'] not in SAMPLE_ERROR_LINES])
+    timings = []
+    t = time.perf_counter()
+    data, info = build_template(cfg, m['masterinfo'], m['uom'], m['plant'], m['plant_group'], po, 'Medicine',
+                                header=sample.HEADER, lines=lines)
+    timings.append(('สร้าง template (ทีมข้อมูล)', time.perf_counter() - t))
+    if progress:
+        progress(0.5)
+    t = time.perf_counter()
+    r = run_uploads(data)
+    timings.append(('ประมวลผล template (Sourcing)', time.perf_counter() - t))
+    if progress:
+        progress(1.0)
+    return timings, len(data) / 2 ** 20, info['Spending Rows'], r.problem
+
+
+def sample_blank_template():
+    '''Blank template of the sample package, as Sourcing would download it from SharePoint.'''
+    return sample.template_bytes(blank=True)
 
 
 XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

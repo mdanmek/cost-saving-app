@@ -1,9 +1,9 @@
 '''Write the IC outputs as Excel files (bytes), so the browser can offer them as downloads.
 
-    for_PD.xlsx        Out_PD, Out_PD_Leadtime          → input of the PD Setup file
-    for_Contract.xlsx  one sheet per Vendor (Ariba)     → Sourcing imports into Ariba
-    for_Collect.xlsx   table Input_forSavingCollect     → appended to the Cost Saving file
-    for_Summary.xlsx   Summary, Summary_ByPlant, Summary_Lines, IC_Check
+    IC_Processed.xlsx  the one file submitted in SharePoint (D57): IC Request → IC Approve → IC Collected
+                       Processed (checksum), Summary, IC_Check, what was keyed, table Input_forSavingCollect
+                       (read by the Project file), Out_PD (PD mode), Out_Contract, Summary_ByPlant / _Lines
+    for_Contract.xlsx  one sheet per Vendor (Ariba)     → Sourcing imports into Ariba after approval
 '''
 import io
 from datetime import date, datetime
@@ -82,10 +82,26 @@ TEXT_CODES = ('Material Code', 'Vendor ID', 'Plant', 'Spend Plant', 'Item ID', '
               'LPP PO Number', 'Reference Material Code')
 
 
-def write_for_pd(result):
+def write_processed(result, inputs, stamp, collect_table_name):
+    '''The one file Sourcing submits in SharePoint (D57). It travels IC Request → IC Approve →
+    IC Collected like the current IC file, so it carries the table Input_forSavingCollect that the
+    Project file reads, and what PD needs (Out_PD). The data package is not copied: the file stays small.'''
     wb = new_workbook()
+    add_table_sheet(wb, 'Processed', pd.DataFrame(stamp, columns=['Field', 'Value']), 'Processed')
+    add_table_sheet(wb, 'Summary', result['Summary'], 'Summary')
+    add_table_sheet(wb, 'IC_Check', result['IC_Check'], 'IC_Check', TEXT_CODES)
+    add_table_sheet(wb, 'Header', pd.DataFrame(list(inputs.header.items()), columns=['Field', 'Value']), 'Header')
+    add_table_sheet(wb, 'Lines', inputs.lines, 'Lines', TEXT_CODES + ('Order Unit', 'Final FOC', 'Nego FOC'))
+    if inputs.leadtime is not None and not inputs.leadtime.empty:
+        add_table_sheet(wb, 'CT_Leadtime', inputs.leadtime, 'CT_Leadtime', TEXT_CODES)
+    if inputs.plant_group is not None:
+        add_table_sheet(wb, 'dimPlantGroup', inputs.plant_group, 'dimPlantGroup')
+    add_table_sheet(wb, 'forSavingCollect', result['Out_Collect'], collect_table_name, TEXT_CODES)
     add_table_sheet(wb, 'Out_PD', result['Out_PD'], 'Out_PD', TEXT_CODES)
     add_table_sheet(wb, 'Out_PD_Leadtime', result['Out_PD_Leadtime'], 'Out_PD_Leadtime', TEXT_CODES)
+    add_table_sheet(wb, 'Out_Contract', result['Out_Contract'], 'Out_Contract', TEXT_CODES)
+    add_table_sheet(wb, 'Summary_ByPlant', result['Summary_ByPlant'], 'Summary_ByPlant', TEXT_CODES)
+    add_table_sheet(wb, 'Summary_Lines', result['Summary_Lines'], 'Summary_Lines', TEXT_CODES)
     return to_bytes(wb)
 
 
@@ -99,19 +115,4 @@ def write_for_contract(result):
         part = part.drop(columns=['Vendor ID']).copy()
         part['Item Number'] = range(1, len(part) + 1)
         add_table_sheet(wb, f'Contract_{vendor}', part, f'Contract_{i}', TEXT_CODES)
-    return to_bytes(wb)
-
-
-def write_for_collect(result, table_name):
-    wb = new_workbook()
-    add_table_sheet(wb, 'forSavingCollect', result['Out_Collect'], table_name, TEXT_CODES)
-    return to_bytes(wb)
-
-
-def write_for_summary(result):
-    wb = new_workbook()
-    add_table_sheet(wb, 'Summary', result['Summary'], 'Summary')
-    add_table_sheet(wb, 'Summary_ByPlant', result['Summary_ByPlant'], 'Summary_ByPlant', TEXT_CODES)
-    add_table_sheet(wb, 'Summary_Lines', result['Summary_Lines'], 'Summary_Lines', TEXT_CODES)
-    add_table_sheet(wb, 'IC_Check', result['IC_Check'], 'IC_Check', TEXT_CODES)
     return to_bytes(wb)

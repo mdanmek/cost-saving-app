@@ -52,7 +52,7 @@ OUT_PD_COLUMNS = [
     'Standard Qty', 'Minimum Qty', 'Fix Vendor Requested', 'UCEP / Note for Info',
     'Material Group', 'Material Type', 'Effective Date', 'Valid Date', 'Project Name', 'Expected', 'Remark',
     'Template Version', 'Info Record Price', 'Info Record FOC', 'Country of Manufacture',
-    'PD Action', 'PD Action Description', 'Combination ID',
+    'PD Action', 'PD Action Description', 'Combination ID', 'Package Version',
 ]
 OUT_PD_LEADTIME_COLUMNS = [
     'Commodity', 'Vendor ID', 'Hospital Area', 'Product Type', 'Minimum Order (Baht)', 'Leadtime (Days)', 'Remark',
@@ -70,6 +70,7 @@ OUT_COLLECT_COLUMNS = [
     'LPP SaveDrug Base Unit', 'LPP DrPharma Base Unit', 'IC Template Version',
     'Line No', 'Plant Scope', 'LPP Hospital', 'LPP Plant Name', 'LPP PO Number', 'LPP PO Date',
     'Reference Material Code', 'LPP Hospital Manual Base Unit', 'Quotation Date', 'Combination ID',
+    'Package Version',
 ]
 OUT_CONTRACT_COLUMNS = [
     'Item Number', 'Type', 'Item Name', 'Description', 'Commodity', 'Region', 'Item ID', 'ERP System ID', 'Plant',
@@ -99,6 +100,9 @@ class ICInputs:
     plant_group: pd.DataFrame
     po_lines: pd.DataFrame
     leadtime: pd.DataFrame = None
+    package: dict = None   # Package_Info of the template (D56); None for files without a package
+    material_commodity: dict = None  # dimMaterial of the package: Material → Commodity (all commodities)
+    official_plant_group: pd.DataFrame = None  # data team's groups in the package (D57: names locked)
 
 
 # ---------------------------------------------------------------- small helpers
@@ -155,12 +159,15 @@ def prepare_masters(inputs):
             'Group': to_text(r.get('Group')), 'Location': to_text(r.get('Location')),
         })
     plant_by_code = {v['Plant']: v for v in plant_by_name.values()}
+    # Plant List: Plant codes or Plant Names, comma separated (Sourcing builds their own groups, D56)
     groups = {}
     for r in records(inputs.plant_group):
-        names = [n.strip() for n in (to_text(r.get('Plant List')) or '').split(',') if n.strip()]
-        groups.setdefault(to_text(r['Plant Group']), [
-            {'Plant': plant_by_name.get(n, {}).get('Plant'), 'Plant Name': n} for n in names
-        ])
+        items = [n.strip() for n in (to_text(r.get('Plant List')) or '').split(',') if n.strip()]
+        plants = []
+        for n in items:
+            p = plant_by_code.get(n) or plant_by_name.get(n)
+            plants.append({'Plant': p['Plant'], 'Plant Name': p['Plant Name']} if p else {'Plant': None, 'Plant Name': n})
+        groups.setdefault(to_text(r['Plant Group']), plants)
     return {
         'masterinfo': masterinfo, 'material_name': material_name, 'vendor_name': vendor_name,
         'uom': uom, 'plant_by_code': plant_by_code, 'groups': groups,
@@ -251,6 +258,8 @@ def build_agreement_lines(inputs, cfg: Config):
     for r in window.to_dict('records'):
         if r.get('Commodity'):
             material_commodity.setdefault(r['Material Code'], r['Commodity'])
+    # the package holds the spending of one commodity only; dimMaterial knows every commodity (E10)
+    material_commodity.update(inputs.material_commodity or {})
     comb = {(r['Strategy'], r['Method'], r['PD Action']): r for r in records(cfg.dim_combination)}
     pd_info = {r['PD Action']: r for r in records(cfg.dim_pd)}
     commodity = {r['Commodity']: r for r in records(cfg.dim_commodity)}.get(to_text(h.get('Commodity')), {})
@@ -264,6 +273,7 @@ def build_agreement_lines(inputs, cfg: Config):
             'Effective Date': to_date(h.get('Effective Date')), 'Valid Date': to_date(h.get('Valid Date')),
             'IC Key Date': key_date, 'Quotation Date': x['Quotation Date'] or to_date(h.get('Quotation Date')),
             'Template Version': cfg.const('IC', 'Template Version'),
+            'Package Version': to_text((inputs.package or {}).get('Package Version')),
         })
         # line value wins over the header default
         row['Vendor ID'] = x['Vendor ID'] or to_text(h.get('Vendor ID'))
@@ -354,9 +364,43 @@ def out_pd(lines):
     return pd.DataFrame([{c: r.get(c) for c in OUT_PD_COLUMNS} for r in lines], columns=OUT_PD_COLUMNS)
 
 
-def out_pd_leadtime(inputs):
+def plant_set(plant_list, plant):
+    '''Plant List text → set of Plant codes (codes or names accepted; unknown names kept as text).'''
+    by_code = {to_text(r['Plant']): to_text(r['Plant']) for r in records(plant)}
+    by_name = {to_text(r['Plant Name']): to_text(r['Plant']) for r in records(plant)}
+    items = [n.strip() for n in (to_text(plant_list) or '').split(',') if n.strip()]
+    return frozenset(by_code.get(n) or by_name.get(n) or n for n in items)
+
+
+def changed_official_groups(inputs):
+    '''Groups whose name is in the data team's copy but whose plants differ (D57).'''
+    official = {to_text(r['Plant Group']): plant_set(r.get('Plant List'), inputs.plant)
+                for r in records(inputs.official_plant_group) if to_text(r.get('Plant Group'))}
+    keyed = {}
+    for r in records(inputs.plant_group):
+        name = to_text(r.get('Plant Group'))
+        if name:
+            keyed.setdefault(name, []).append(plant_set(r.get('Plant List'), inputs.plant))
+    return sorted(n for n, sets in keyed.items() if n in official and any(s != official[n] for s in sets))
+
+
+def is_ct(header, cfg: Config):
+    '''CT_Leadtime is used only for a CT Method, as in the current file (D56): dim_method.is CT.'''
+    flags = {r['Method']: r['is CT'] for r in records(cfg.dim_method)}
+    return flags.get(to_text(header.get('Method'))) is True
+
+
+def leadtime_rows(inputs):
+    return [r for r in records(inputs.leadtime)
+            if to_text(r.get('Hospital Area')) and (to_number(r.get('Leadtime (Days)')) is not None
+                                                     or to_number(r.get('Minimum Order (Baht)')) is not None)]
+
+
+def out_pd_leadtime(inputs, cfg: Config):
     h = inputs.header
     rows = []
+    if not is_ct(h, cfg):
+        return pd.DataFrame(rows, columns=OUT_PD_LEADTIME_COLUMNS)
     for r in records(inputs.leadtime):
         area = to_text(r.get('Hospital Area'))
         days, minimum = to_number(r.get('Leadtime (Days)')), to_number(r.get('Minimum Order (Baht)'))
@@ -521,7 +565,7 @@ def summary_by_plant(sl):
     return g
 
 
-def summary(sl, lines, check, header):
+def summary(sl, lines, check, header, package=None):
     def total(col):
         return float(pd.to_numeric(sl[col], errors='coerce').fillna(0).sum())
 
@@ -535,6 +579,10 @@ def summary(sl, lines, check, header):
         ('Method', header.get('Method')), ('Project Name', header.get('Project Name')),
         ('Effective Date', to_date(header.get('Effective Date'))), ('Valid Date', to_date(header.get('Valid Date'))),
         ('Key Date (Baseline frozen)', to_date(header.get('Key Date'))),
+        ('Package Version', to_text((package or {}).get('Package Version'))),
+        ('Spending in package', None if not package else
+         f"{package.get('Spending From'):%Y-%m-%d} to {package.get('Spending To'):%Y-%m-%d}"
+         if package.get('Spending From') and package.get('Spending To') else None),
         ('Lines', len({r['Line No'] for r in lines})),
         ('Lines counted for Cost Saving', count_lines(sl)),
         ('Lines without Baseline', count_lines(sl[sl['Baseline Source'] == 'No Baseline'])),
@@ -554,7 +602,7 @@ def summary(sl, lines, check, header):
 
 
 # ---------------------------------------------------------------- Check (template-spec section 7)
-def build_check(lines, contract_rows, header, cfg: Config):
+def build_check(lines, contract_rows, header, cfg: Config, inputs=None):
     msgs = []
 
     def add(level, upload, message, r=None):
@@ -579,6 +627,30 @@ def build_check(lines, contract_rows, header, cfg: Config):
     ]:
         if text:
             add('Error', 'Header', text)
+
+    # data package (D56): the Baseline is only as recent as the package
+    package = (inputs.package if inputs is not None else None) or {}
+    key_date = to_date(header.get('Key Date'))
+    if package:
+        p_from, p_to = package.get('Spending From'), package.get('Spending To')
+        p_com = to_text(package.get('Commodity'))
+        if commodity and p_com and commodity != p_com:
+            add('Error', 'Package', f"P03 Commodity ใน Header ({commodity}) ไม่ตรงกับแพ็กเกจ ({p_com}) ใช้ template ของ commodity นี้")
+        if key_date and p_to and (key_date - p_to).days > cfg.const_number('Package', 'Max Age Days'):
+            add('Warning', 'Package', f"P01 แพ็กเกจ {package.get('Package Version')} มี spending ถึง {p_to:%Y-%m-%d} "
+                f"เก่ากว่า Key Date เกิน {int(cfg.const_number('Package', 'Max Age Days'))} วัน ขอ template รุ่นใหม่จากทีมข้อมูล")
+        if key_date and p_from and add_months(key_date, -int(cfg.const_number('IC', 'LPP Lookback Months'))) < p_from:
+            add('Warning', 'Package', f"P02 spending ในแพ็กเกจเริ่ม {p_from:%Y-%m-%d} ไม่ครบ 12 เดือนก่อน Key Date: LPP และ Summary อาจขาดบางส่วน")
+    if inputs is not None and inputs.official_plant_group is not None and inputs.plant_group is not None:
+        for name in changed_official_groups(inputs):
+            add('Error', 'dimPlantGroup', f'P04 กลุ่ม {name} ถูกแก้ Plant List ต่างจากกลุ่มของทีมข้อมูล '
+                'ถ้าต้องการชุด Plant อื่นให้เพิ่มกลุ่มใหม่ชื่ออื่น แล้วคืนค่ากลุ่มนี้ตาม template')
+    if inputs is not None:
+        ct, lt = is_ct(header, cfg), leadtime_rows(inputs)
+        if ct and not lt:
+            add('Warning', 'CT_Leadtime', 'W09 Method นี้เป็น CT แต่ยังไม่กรอก CT_Leadtime (PD จะใช้ค่าเริ่มต้น)')
+        if not ct and lt:
+            add('Warning', 'CT_Leadtime', 'W10 กรอก CT_Leadtime แต่ Method นี้ไม่ใช่ CT จึงไม่ส่งต่อให้ PD (ใช้เฉพาะ CT)')
 
     uses_transfer = {r['Method']: r['Uses Transfer Price'] for r in records(cfg.dim_method)}
     ppv_warning = cfg.const_number('IC', 'PPV Warning %')
@@ -643,16 +715,16 @@ def run_ic(inputs: ICInputs, cfg: Config):
     '''Returns every table of the four outputs plus Check and agreement_line.'''
     lines, window = build_agreement_lines(inputs, cfg)
     contract_rows = contract_base(lines, cfg)
-    check = build_check(lines, contract_rows, inputs.header, cfg)
+    check = build_check(lines, contract_rows, inputs.header, cfg, inputs)
     sl = summary_lines(lines, window, inputs, cfg)
     return {
         'agreement_line': pd.DataFrame(lines),
         'Out_PD': out_pd(lines),
-        'Out_PD_Leadtime': out_pd_leadtime(inputs),
+        'Out_PD_Leadtime': out_pd_leadtime(inputs, cfg),
         'Out_Contract': out_contract(contract_rows),
         'Out_Collect': out_collect(lines),
         'Summary_Lines': sl,
         'Summary_ByPlant': summary_by_plant(sl),
-        'Summary': summary(sl, lines, check, inputs.header),
+        'Summary': summary(sl, lines, check, inputs.header, inputs.package),
         'IC_Check': check,
     }

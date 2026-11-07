@@ -11,7 +11,6 @@ import re
 import runpy
 import sys
 import types
-import zipfile
 
 import pytest
 from openpyxl import load_workbook
@@ -27,10 +26,10 @@ def run_sample(with_errors, erp=None):
     return webui.run_uploads(ic, po, master, erp)
 
 
-def test_clean_sample_has_no_error_and_four_readable_files():
+def test_clean_sample_has_no_error_and_two_readable_files():
     r = run_sample(False)
     assert r.problem is None and r.errors == 0 and r.can_download
-    assert sorted(n.rsplit('_for_', 1)[1] for n in r.files) == ['Collect.xlsx', 'Contract.xlsx', 'PD.xlsx', 'Summary.xlsx']
+    assert sorted(webui.file_label(n) for n in r.files) == ['IC Processed (ไฟล์ยื่น SharePoint)', 'for Contract']
     for data in r.files.values():
         assert load_workbook(io.BytesIO(data)).sheetnames
 
@@ -50,7 +49,7 @@ def test_erp_system_id_typed_by_user_removes_warning():
     assert not with_id.result['IC_Check']['Message'].str.contains(msg).any()
 
 
-def test_master_tables_may_sit_in_the_ic_file():
+def test_earlier_format_master_tables_in_the_ic_file():
     from costsaving import sample
     r = webui.run_uploads(sample.ic_workbook_bytes(with_masters=True), [sample.po_csv_bytes()], None)
     assert r.problem is None and r.files
@@ -65,16 +64,10 @@ def test_bad_input_returns_a_message_not_an_exception(ic, expected):
     assert expected in r.problem and not r.can_download
 
 
-def test_missing_master_table_is_reported():
+def test_earlier_format_missing_master_table_is_reported():
     from costsaving import sample
     r = webui.run_uploads(sample.ic_workbook_bytes(with_masters=False), [sample.po_csv_bytes()], None)
     assert 'ไม่พบตาราง' in r.problem
-
-
-def test_zip_holds_the_four_files():
-    r = run_sample(False)
-    names = zipfile.ZipFile(io.BytesIO(webui.zip_files(r.files))).namelist()
-    assert sorted(names) == sorted(r.files)
 
 
 def test_summary_display_formats_percent_and_numbers():
@@ -98,9 +91,9 @@ class StopScript(Exception):
 
 
 class FakeStreamlit(types.ModuleType):
-    def __init__(self, choice, button=True):
+    def __init__(self, choice, button=True, mode=0):
         super().__init__('streamlit')
-        self.choice, self.pressed = choice, button
+        self.choice, self.pressed, self.mode = choice, button, mode
         self.session_state = {}
         self.downloads, self.errors, self.frames = [], [], 0
         self.sidebar = self
@@ -121,13 +114,25 @@ class FakeStreamlit(types.ModuleType):
         return ''
 
     def radio(self, label, options, **k):
-        return options[self.choice]
+        return options[self.mode if label == 'เลือกโหมด' else self.choice]
+
+    def checkbox(self, label, **k):
+        return self.choice == 1  # data-team mode: 'ใช้ข้อมูลตัวอย่าง'
+
+    def selectbox(self, label, options, **k):
+        return options[0]
+
+    def date_input(self, *a, **k):
+        return None
+
+    def select_slider(self, label, options, value=None, **k):
+        return value
 
     def file_uploader(self, *a, **k):
         return None
 
-    def button(self, *a, disabled=False, **k):
-        return self.pressed and not disabled
+    def button(self, label, disabled=False, **k):
+        return self.pressed and not disabled and label in ('ประมวลผล', 'สร้าง template')  # not the speed test
 
     def spinner(self, *a, **k):
         return self
@@ -144,8 +149,9 @@ class FakeStreamlit(types.ModuleType):
     def dataframe(self, *a, **k):
         self.frames += 1
 
-    def download_button(self, label, data=None, disabled=False, **k):
-        self.downloads.append((label, disabled, len(data or b'')))
+    def download_button(self, label, data=None, disabled=False, key=None, **k):
+        if key != 'dl_sample_template':  # the sidebar sample template is always offered
+            self.downloads.append((label, disabled, len(data or b'')))
 
 
 def run_page(fake, monkeypatch):
@@ -158,16 +164,16 @@ def run_page(fake, monkeypatch):
     return fake
 
 
-def test_page_clean_sample_enables_five_downloads(monkeypatch):
+def test_page_clean_sample_enables_the_downloads(monkeypatch):
     fake = run_page(FakeStreamlit(choice=1), monkeypatch)
-    assert len(fake.downloads) == 5 and not any(d for _, d, _ in fake.downloads)
+    assert len(fake.downloads) == 2 and not any(d for _, d, _ in fake.downloads)
     assert all(size > 0 for _, _, size in fake.downloads)
     assert fake.frames >= 3 and not fake.errors
 
 
 def test_page_sample_with_errors_disables_downloads(monkeypatch):
     fake = run_page(FakeStreamlit(choice=2), monkeypatch)
-    assert len(fake.downloads) == 5 and all(d for _, d, _ in fake.downloads)
+    assert len(fake.downloads) == 2 and all(d for _, d, _ in fake.downloads)
     assert any('Error 3' in e for e in fake.errors)
 
 
@@ -178,7 +184,7 @@ def test_page_stale_result_disables_downloads(monkeypatch):
     again = FakeStreamlit(choice=2, button=False)
     again.session_state = first.session_state
     run_page(again, monkeypatch)
-    assert len(again.downloads) == 5 and all(d for _, d, _ in again.downloads)
+    assert len(again.downloads) == 2 and all(d for _, d, _ in again.downloads)
 
 
 def test_page_without_upload_waits(monkeypatch):
@@ -208,3 +214,19 @@ def test_index_html_pins_one_stlite_version():
     versions = set(re.findall(r'@stlite/browser@([\d.]+)/', html))
     assert len(versions) == 1, versions
     assert 'Content-Security-Policy' in html and "form-action 'none'" in html
+
+
+def test_page_data_team_mode_builds_sample_template(monkeypatch):
+    fake = run_page(FakeStreamlit(choice=1, mode=1), monkeypatch)
+    assert fake.session_state['build'].problem is None
+    assert fake.downloads and fake.downloads[0][0].startswith('ดาวน์โหลด IC_Template_') and not fake.downloads[0][1]
+
+
+def test_benchmark_small():
+    timings, size_mb, n, problem = webui.benchmark(2000)
+    assert problem is None and n >= 2000 and [k for k, _ in timings][1].startswith('ประมวลผล') and size_mb > 0
+
+
+def test_page_pd_mode_is_a_placeholder(monkeypatch):
+    fake = run_page(FakeStreamlit(choice=0, mode=2), monkeypatch)
+    assert fake.downloads == [] and not fake.session_state

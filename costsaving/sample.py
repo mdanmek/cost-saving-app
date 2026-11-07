@@ -145,3 +145,33 @@ def po_csv_bytes(po=None):
 
 def as_file(data):
     return io.BytesIO(data)
+
+
+# ---------------------------------------------------------------- template with data package (D56)
+def master_frames():
+    return {
+        'masterinfo': pd.DataFrame(MASTERINFO, columns=['Material Code', 'Material Description', 'Vendor ID', 'Vendor Name',
+                                                        'MFG', 'Order Unit', 'FOC', 'Order Unit Price']),
+        'uom': pd.DataFrame(UOM, columns=['Order Unit', 'Order Unit Text', 'Conversion Rate', 'Base Unit', 'ISO Code']),
+        'plant': pd.DataFrame(PLANT, columns=['Group', 'Plant', 'Plant Name', 'Hospital Tier', 'Location']),
+        'plant_group': pd.DataFrame(PLANT_GROUP, columns=['Plant Group', 'Plant List', 'Count']),
+    }
+
+
+def template_bytes(header=None, lines=None, leadtime=None, blank=False, spend_from=None, spend_to=None):
+    '''The sample as the data team would publish it: template + package, built by template.build_template.
+    blank=True gives the empty template (only Commodity set), as Sourcing downloads it.'''
+    from datetime import datetime, timezone
+    from .config import load_config
+    from .readers import normalize_po_lines
+    from .template import build_template
+    m = master_frames()
+    data, _ = build_template(
+        load_config(), m['masterinfo'], m['uom'], m['plant'], m['plant_group'], normalize_po_lines(po_df()), 'Medicine',
+        spend_from=spend_from, spend_to=spend_to,
+        header=None if blank else (header or HEADER),
+        lines=None if blank else lines_df(lines),
+        leadtime=None if blank else (LEADTIME if leadtime is None else leadtime),
+        created=datetime(2026, 11, 6, tzinfo=timezone.utc),
+    )
+    return data

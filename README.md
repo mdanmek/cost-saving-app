@@ -8,14 +8,49 @@
 
 ## ใช้หน้าเว็บ
 
-1. เปิดหน้าเว็บ ครั้งแรกรอประมาณ 20–60 วินาทีให้โหลด Python, pandas และ openpyxl
-2. อัปโหลด **ไฟล์ IC** (.xlsx มีตาราง Header, Lines, CT_Leadtime), **ไฟล์ master** (ไม่บังคับ ถ้าตาราง master อยู่ในไฟล์ IC แล้ว) และ **CSV PO line** `prc_spending_sap_{year}.csv` (เลือกได้หลายไฟล์)
-3. กด **ประมวลผล** แล้วดู **IC_Check** ก่อน ถ้ามีแถว Level = Error ต้องแก้ในไฟล์ IC แล้วอัปโหลดใหม่ ระหว่างนั้นปุ่มดาวน์โหลดจะถูกปิด
-4. ดู **Summary** และ Summary ราย Plant แล้วดาวน์โหลดไฟล์ทีละไฟล์ หรือทั้ง 4 ไฟล์เป็น .zip
+หน้าเว็บมีสามโหมด เลือกที่แถบด้านซ้าย (decision D56)
 
-ถ้าอยากลองโดยไม่มีไฟล์จริง เลือก **ข้อมูลตัวอย่าง (สมมติ)** ที่แถบด้านข้าง มีสองชุด คือชุดที่ไม่มี Error (ลองดาวน์โหลดได้) และชุดที่มี Error (ดูว่าระบบกันการดาวน์โหลดอย่างไร)
+```
+ทีมข้อมูล   master + CSV PO ─▶ [โหมดทีมข้อมูล] ─▶ template IC + แพ็กเกจ (1 ไฟล์ต่อ commodity) ─▶ SharePoint
+Sourcing   ดาวน์โหลด template ─▶ คีย์ ─▶ [โหมด Sourcing] ─▶ IC Processed, for Contract, for Collect, for Summary
+           IC Processed ─▶ ยื่นใน SharePoint ─▶ manager approve
+PD         ดาวน์โหลด IC Processed ─▶ [โหมด PD, รอบถัดไป] ─▶ ไฟล์ upload Source List, Info Record, FOC
+```
 
-ค่า **ERP System ID** ของ Ariba เป็นค่าของระบบองค์กร จึงไม่อยู่ใน repo ให้พิมพ์ที่แถบด้านข้างทุกครั้ง ถ้าเว้นว่าง ไฟล์ for_Contract จะมีคอลัมน์นี้ว่างและ IC_Check จะเตือน
+**Sourcing**
+
+1. ดาวน์โหลด template รุ่นล่าสุดจาก SharePoint คีย์ Header และ Lines ถ้า Method เป็น CT ให้กรอก CT_Leadtime ด้วย ถ้าต้องการกลุ่ม Plant ของตัวเอง ให้เพิ่มแถวใน dimPlantGroup (Plant List ใส่รหัสหรือชื่อ Plant คั่นด้วย `,`)
+2. อัปโหลด template ทั้งไฟล์ แล้วกด **ประมวลผล** ครั้งแรกรอประมาณ 20–60 วินาทีให้โหลด Python และ template ที่มี spending ทั้งปีอาจใช้เวลาอีกประมาณหนึ่งนาที
+3. ดู **IC_Check** ก่อน ถ้ามีแถว Level = Error ต้องแก้ใน template แล้วอัปโหลดใหม่ ระหว่างนั้นปุ่มดาวน์โหลดจะถูกปิด
+4. ดาวน์โหลด 4 ไฟล์: **IC Processed** (ยื่นใน SharePoint และ PD ใช้ต่อ), **for Contract** (นำเข้า Ariba), **for Collect** (ส่งเข้าไฟล์ Cost Saving), **for Summary**
+
+ถ้าอยากลองโดยไม่มีไฟล์จริง เลือก **ข้อมูลตัวอย่าง (สมมติ)** ที่แถบด้านข้าง มีชุดที่ไม่มี Error และชุดที่มี Error และดาวน์โหลด template ตัวอย่าง (ว่าง) ไปดูรูปแบบได้
+
+ค่า **ERP System ID** ของ Ariba เป็นค่าของระบบองค์กร จึงไม่อยู่ใน repo ให้พิมพ์ที่แถบด้านข้างทุกครั้ง
+
+ส่วน **ขั้นสูง** ใช้ไฟล์ IC แบบเดิม (ไม่มีแพ็กเกจ) คู่กับไฟล์ master และ CSV PO หรือใช้ไฟล์ master / CSV แทนตารางในแพ็กเกจเพื่อลองแพ็กเกจรุ่นใหม่ (Package Version จะต่อท้ายด้วย `+ CSV`)
+
+**ทีมข้อมูล** อัปโหลดไฟล์ master (dimMasterInfo_Raw หรือ MasterInfo_ActiveTH, dimUOM_Raw, dimPlant_Raw, dimPlantGroup) และ CSV PO line เลือก Commodity แล้วกด **สร้าง template** ได้ไฟล์ `IC_Template_{Package Version}.xlsx` นำไปวางใน SharePoint แทนรุ่นเดิม ช่วง spending ค่าเริ่มต้นคือถึง PO Date ล่าสุดในไฟล์ ย้อนหลัง 13 เดือน
+
+### template และแพ็กเกจ
+
+template เป็นไฟล์เดียวเหมือนไฟล์ IC ปัจจุบัน ส่วนที่ Sourcing คีย์และส่วนที่ทีมข้อมูลควบคุมอยู่คนละชีต
+
+| ชีต | ใครกรอก | เนื้อหา |
+|---|---|---|
+| Header, Lines | Sourcing | การต่อรองหนึ่งครั้ง (มี dropdown จาก config) |
+| CT_Leadtime | Sourcing เฉพาะ Method ที่เป็น CT | Leadtime และ Minimum Order ราย Hospital Area (`dim_method.csv` คอลัมน์ `is CT`) |
+| dimPlantGroup | ทีมข้อมูลตั้งต้น, Sourcing เพิ่มได้ | กลุ่ม Plant |
+| Package_Info | ทีมข้อมูล | Package Version, Commodity, ช่วง spending |
+| dimMasterInfo_Raw, dimUOM_Raw, dimPlant_Raw | ทีมข้อมูล | master |
+| fact_po_lines | ทีมข้อมูล | PO line ของ commodity ในช่วง spending (ใช้หา LPP และ Summary 12 เดือน) |
+| dimMaterial | ทีมข้อมูล | Material → Commodity จาก spending ทุก commodity (ใช้ตรวจ E10) |
+
+ทุกตารางเริ่มที่ A1 เพื่อให้แอปอ่านแบบ streaming ได้ แอปเก็บไว้เฉพาะ PO line ของ Material ที่อยู่ใน Lines จึงใช้หน่วยความจำน้อยแม้ fact_po_lines มีเป็นแสนแถว แต่ยังต้อง parse ทุกแถว (ประมาณ 25 วินาทีต่อ 160,000 แถวบน CPython)
+
+IC_Check ของแพ็กเกจ: **P01** spending ในแพ็กเกจเก่ากว่า Key Date เกิน 45 วัน, **P02** spending ไม่ครบ 12 เดือนก่อน Key Date, **P03** Commodity ใน Header ไม่ตรงกับแพ็กเกจ (Error) · CT_Leadtime: **W09** Method เป็น CT แต่ไม่กรอก, **W10** กรอกแต่ไม่ใช่ CT
+
+ไฟล์ **IC Processed** เก็บสิ่งที่คีย์ (Header, Lines, CT_Leadtime, dimPlantGroup), Out_PD, IC_Check และชีต Processed ที่มี Package Version และ **Input Checksum (SHA-256)** ของสิ่งที่คีย์ โหมด PD จะใช้ checksum นี้ตรวจว่าไฟล์ถูกแก้หลังประมวลผลหรือไม่ ไฟล์นี้ไม่คัดลอกแพ็กเกจไปด้วย จึงเล็ก
 
 ### ข้อมูลไปที่ไหน
 
@@ -28,16 +63,15 @@
 ## ไหลอย่างไร
 
 ```
-ไฟล์ IC (.xlsx)            ตาราง Header, Lines, CT_Leadtime
-ไฟล์ master (.xlsx)        dimUOM_Raw, dimPlant_Raw, dimPlantGroup, dimMasterInfo_Raw
-                           (ไม่ต้องใช้ถ้าตารางเหล่านี้อยู่ในไฟล์ IC แล้ว เช่นไฟล์ IC เดิม)
-CSV PO line                prc_spending_sap_{year}.csv (อ่านเฉพาะ Material ที่อยู่ใน Lines)
+template IC + แพ็กเกจ      Header, Lines, CT_Leadtime, dimPlantGroup + master + fact_po_lines + dimMaterial
+(หรือแบบเดิม: ไฟล์ IC + ไฟล์ master + CSV PO line prc_spending_sap_{year}.csv)
+                           อ่านเฉพาะ PO line ของ Material ที่อยู่ใน Lines
           │
           ▼
    agreement_line  (grain: Line × Plant; Plant Group แตกเป็นรายโรงพยาบาล, ว่าง = All Plant)
           │  Baseline = min(LPP Hospital, SDC, Dr. Pharma) หยุดค่าที่ Key Date
           ▼
-   *_for_PD.xlsx         Out_PD, Out_PD_Leadtime        → ไฟล์ PD Setup
+   *_IC_Processed.xlsx   Header, Lines, Out_PD, Out_PD_Leadtime, checksum → SharePoint → PD
    *_for_Contract.xlsx   หนึ่งชีตต่อ Vendor (Ariba)       → Sourcing import
    *_for_Collect.xlsx    ตาราง Input_forSavingCollect    → ไฟล์ Cost Saving
    *_for_Summary.xlsx    Summary, Summary_ByPlant, Summary_Lines, IC_Check
@@ -53,7 +87,8 @@ CSV PO line                prc_spending_sap_{year}.csv (อ่านเฉพา
 | `costsaving/readers.py` | อ่านตาราง Excel ตามชื่อตาราง และ CSV PO line ทีละ chunk |
 | `costsaving/ic.py` | กติกาทั้งหมดของไฟล์ IC |
 | `costsaving/writers.py` | เขียนไฟล์ output เป็น bytes ให้เบราว์เซอร์ดาวน์โหลด |
-| `costsaving/pipeline.py` | `process_ic(...)` เรียกครั้งเดียวจากไฟล์ input ถึงไฟล์ output |
+| `costsaving/template.py` | สร้าง template + แพ็กเกจ (โหมดทีมข้อมูล) และอ่าน template แบบ streaming (โหมด Sourcing) |
+| `costsaving/pipeline.py` | `process_ic(...)` เรียกครั้งเดียวจากไฟล์ input ถึงไฟล์ output, checksum ของไฟล์ IC Processed |
 | `costsaving/webui.py` | สิ่งที่หน้าเว็บทำ (รันจากไฟล์ที่อัปโหลด, เรียง IC_Check, กันดาวน์โหลดเมื่อมี Error, zip) แยกจาก Streamlit เพื่อให้ pytest ทดสอบได้ |
 | `costsaving/sample.py` | ข้อมูลสมมติ ใช้ทั้งใน test และปุ่มข้อมูลตัวอย่างของหน้าเว็บ |
 | `streamlit_app.py` | หน้าเว็บ (วาด widget รอบ `webui`) |
