@@ -214,6 +214,7 @@ def test_index_html_pins_one_stlite_version():
     versions = set(re.findall(r'@stlite/browser@([\d.]+)/', html))
     assert len(versions) == 1, versions
     assert 'Content-Security-Policy' in html and "form-action 'none'" in html
+    assert 'https://stlite.invalid' in html  # download_button files (fake host inside the page)
 
 
 def test_page_data_team_mode_builds_sample_template(monkeypatch):
