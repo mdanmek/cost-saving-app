@@ -14,7 +14,7 @@ import streamlit as st
 from costsaving import webui
 from costsaving.config import load_config
 
-st.set_page_config(page_title='Cost Saving — IC processor', layout='wide')
+st.set_page_config(page_title='Cost Saving — IC processor', layout='wide', initial_sidebar_state='expanded')
 
 MODES = ['Sourcing: ประมวลผล template IC', 'ทีมข้อมูล: สร้าง template + แพ็กเกจ', 'PD: setup (ยังไม่พร้อม)']
 

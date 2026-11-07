@@ -10,6 +10,8 @@
       pypi.org, files.pythonhosted.org   micropip, only if a requirement is not in the Pyodide distribution
       data: in script-src / worker-src: the stlite worker loads its own code with importScripts(data:...)
       (seen in the browser 2026-11-06). Loading code is allowed; sending data out is still limited by connect-src / img-src.
+      https://stlite.invalid: stlite serves download_button files from this fake host inside the page
+      (.invalid never resolves, nothing leaves the browser). Without it the download buttons fail (2026-11-07).
       If the page stays blank, open the browser console and look for "Content-Security-Policy" errors.
     -->
     <meta
@@ -17,10 +19,10 @@
       content="default-src 'self' https://cdn.jsdelivr.net;
                script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data:;
                worker-src 'self' https://cdn.jsdelivr.net blob: data:;
-               connect-src 'self' https://cdn.jsdelivr.net https://pypi.org https://files.pythonhosted.org blob: data:;
+               connect-src 'self' https://cdn.jsdelivr.net https://pypi.org https://files.pythonhosted.org https://stlite.invalid blob: data:;
                style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline';
                font-src 'self' https://cdn.jsdelivr.net data:;
-               img-src 'self' https://cdn.jsdelivr.net data: blob:;
+               img-src 'self' https://cdn.jsdelivr.net https://stlite.invalid data: blob:;
                frame-src 'self' blob:;
                form-action 'none'; base-uri 'self'; object-src 'none'"
     />
