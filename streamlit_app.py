@@ -5,7 +5,7 @@ and nothing is sent to a server. The logic is in costsaving/webui.py (tested by 
 only draws the widgets.
 
 Modes (D56):
-    Sourcing   template with data package (from SharePoint) → IC_Check, Summary → 4 files
+    Sourcing   template with data package (from SharePoint) → IC_Check, Summary → IC Processed + for Contract (D57)
     ทีมข้อมูล    master workbook + PO CSVs → template with data package, to publish on SharePoint
     PD         (next round) processed IC files + SAP reports → upload files for Source List, Info Record, FOC
 '''
@@ -50,7 +50,7 @@ def sourcing():
 
     st.subheader('1. อัปโหลด template ที่คีย์แล้ว')
     ic_up = st.file_uploader(
-        'template IC (.xlsx) — ดาวน์โหลดรุ่นล่าสุดจาก SharePoint คีย์ Header, Lines (และ CT_Leadtime ถ้าเป็น CT) แล้วอัปโหลดทั้งไฟล์',
+        'template IC (.xlsx) — ดาวน์โหลดรุ่นล่าสุดจาก SharePoint คีย์ Header และ Lines แล้วอัปโหลดทั้งไฟล์',
         type=['xlsx', 'xlsm'], disabled=use_sample)
     with st.expander('ขั้นสูง: ไฟล์ IC แบบเดิม หรือแทนข้อมูลในแพ็กเกจ'):
         st.caption('ใช้เมื่อเทียบกับไฟล์ IC เดิม (ไม่มีแพ็กเกจ) หรือทีมข้อมูลลองแพ็กเกจรุ่นใหม่ก่อนประกาศ '

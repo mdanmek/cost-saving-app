@@ -1,6 +1,6 @@
 '''One call from uploaded files to output files. The browser UI (stlite) and the tests both use this.
 
-    IC workbook (Header, Lines, CT_Leadtime) ─┐
+    IC workbook (Header, Lines)             ─┐
     master workbook (dimUOM_Raw, dimPlant_Raw, ├─▶ run_ic ─▶ {file name: xlsx bytes}
        dimPlantGroup, dimMasterInfo_Raw)       │
     PO-line CSV(s) prc_spending_sap_{year}  ───┘
@@ -50,13 +50,12 @@ def load_ic_inputs(ic_file, po_files=(), master_file=None, po_table=None, key_da
     Sourcing keys it today (legacy.py), and key_date is needed because that file has none.'''
     ic_wb = open_workbook(ic_file)
     workbooks = [ic_wb] + ([open_workbook(master_file)] if master_file is not None else [])
-    messages, leadtime = [], None
+    messages = []
     if is_legacy(ic_wb):
-        header, lines, leadtime, messages = read_legacy(ic_wb, key_date)
+        header, lines, messages = read_legacy(ic_wb, key_date)
     else:
         header = read_header(ic_wb)
         lines = read_table(ic_wb, 'Lines')
-        leadtime = read_table(ic_wb, 'CT_Leadtime', required=False)
     materials = set(lines['Material Code'].map(to_text).dropna())
     if 'Reference Material Code' in lines:
         materials |= set(lines['Reference Material Code'].map(to_text).dropna())
@@ -72,7 +71,6 @@ def load_ic_inputs(ic_file, po_files=(), master_file=None, po_table=None, key_da
         plant=_find_table(workbooks, 'dimPlant_Raw'),
         plant_group=_find_table(workbooks, 'dimPlantGroup'),
         po_lines=po,
-        leadtime=leadtime,
         messages=messages,
     )
 
@@ -95,7 +93,7 @@ def load_template_inputs(ic_bytes, po_files=(), master_file=None):
     t = read_template(ic_bytes)
     inputs = ICInputs(header=t['header'], lines=t['lines'], masterinfo=t['masterinfo'], uom=t['uom'],
                       plant=t['plant'], plant_group=t['plant_group'], po_lines=t['po_lines'],
-                      leadtime=t['leadtime'], package=t['package'], material_commodity=t['material_commodity'],
+                      package=t['package'], material_commodity=t['material_commodity'],
                       official_plant_group=t['official_plant_group'])
     if master_file is not None:
         wb = open_workbook(master_file)
@@ -135,7 +133,7 @@ def canonical_text(value):
 
 
 def input_checksum(inputs):
-    '''SHA-256 of what Sourcing keyed (Header, Lines, CT_Leadtime, dimPlantGroup) + package version.
+    '''SHA-256 of what Sourcing keyed (Header, Lines, dimPlantGroup) + package version.
     Written in the processed file, so the PD mode can tell whether the file was edited after approval.
     Values go through canonical_text, and empty trailing rows / columns do not count.'''
     def table(df):
@@ -146,7 +144,7 @@ def input_checksum(inputs):
                 if any(r[i] is not None for r in rows)]
     payload = {
         'header': {str(k): canonical_text(v) for k, v in sorted(inputs.header.items(), key=lambda kv: str(kv[0]))},
-        'lines': table(inputs.lines), 'leadtime': table(inputs.leadtime), 'plant_group': table(inputs.plant_group),
+        'lines': table(inputs.lines), 'plant_group': table(inputs.plant_group),
         'package': to_text((inputs.package or {}).get('Package Version')),
     }
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode('utf-8')).hexdigest()

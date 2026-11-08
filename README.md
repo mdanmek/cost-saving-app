@@ -12,23 +12,23 @@
 
 ```
 ทีมข้อมูล   master + CSV PO ─▶ [โหมดทีมข้อมูล] ─▶ template IC + แพ็กเกจ (1 ไฟล์ต่อ commodity) ─▶ SharePoint
-Sourcing   ดาวน์โหลด template ─▶ คีย์ ─▶ [โหมด Sourcing] ─▶ IC Processed, for Contract, for Collect, for Summary
+Sourcing   ดาวน์โหลด template ─▶ คีย์ ─▶ [โหมด Sourcing] ─▶ IC Processed, for Contract
            IC Processed ─▶ ยื่นใน SharePoint ─▶ manager approve
 PD         ดาวน์โหลด IC Processed ─▶ [โหมด PD, รอบถัดไป] ─▶ ไฟล์ upload Source List, Info Record, FOC
 ```
 
 **Sourcing**
 
-1. ดาวน์โหลด template รุ่นล่าสุดจาก SharePoint คีย์ Header และ Lines ถ้า Method เป็น CT ให้กรอก CT_Leadtime ด้วย ถ้าต้องการกลุ่ม Plant ของตัวเอง ให้เพิ่มแถวใน dimPlantGroup (Plant List ใส่รหัสหรือชื่อ Plant คั่นด้วย `,`)
+1. ดาวน์โหลด template รุ่นล่าสุดจาก SharePoint คีย์ Header และ Lines (คอลัมน์เรียงแบบ noCT_Input ของไฟล์เดิม ไม่ต้องกรอกคำอธิบายสินค้า ชื่อ Vendor และ MFG) Quit / Inactive ไม่ต้องกรอกราคา ถ้าต้องการกลุ่ม Plant ของตัวเอง ให้เพิ่มแถวใน dimPlantGroup (Plant List ใส่รหัสหรือชื่อ Plant คั่นด้วย `,`)
 2. อัปโหลด template ทั้งไฟล์ แล้วกด **ประมวลผล** ครั้งแรกรอประมาณ 20–60 วินาทีให้โหลด Python และ template ที่มี spending ทั้งปีอาจใช้เวลาอีกประมาณหนึ่งนาที
 3. ดู **IC_Check** ก่อน ถ้ามีแถว Level = Error ต้องแก้ใน template แล้วอัปโหลดใหม่ ระหว่างนั้นปุ่มดาวน์โหลดจะถูกปิด
-4. ดาวน์โหลด 4 ไฟล์: **IC Processed** (ยื่นใน SharePoint และ PD ใช้ต่อ), **for Contract** (นำเข้า Ariba), **for Collect** (ส่งเข้าไฟล์ Cost Saving), **for Summary**
+4. ดาวน์โหลด 2 ไฟล์ (D57): **IC Processed** ไฟล์เดียวที่ยื่นใน SharePoint มี Summary, IC_Check, ตาราง `Input_forSavingCollect` สำหรับไฟล์ Project และ Out_PD สำหรับ PD · **for Contract** นำเข้า Ariba
 
 ถ้าอยากลองโดยไม่มีไฟล์จริง เลือก **ข้อมูลตัวอย่าง (สมมติ)** ที่แถบด้านข้าง มีชุดที่ไม่มี Error และชุดที่มี Error และดาวน์โหลด template ตัวอย่าง (ว่าง) ไปดูรูปแบบได้
 
 ค่า **ERP System ID** ของ Ariba เป็นค่าของระบบองค์กร จึงไม่อยู่ใน repo ให้พิมพ์ที่แถบด้านข้างทุกครั้ง
 
-ส่วน **ขั้นสูง** ใช้ไฟล์ IC แบบเดิม (Price_Change_Template ที่คีย์ใน noCT_Input หรือ CT_Vendor + CT_Leadtime + CT_Input ที่รีเฟรชแล้ว อ่านตาม `costsaving/legacy.py` ต้องกรอก Key Date ที่หน้าเว็บ) คู่กับ CSV PO หรือใช้ไฟล์ master / CSV แทนตารางในแพ็กเกจเพื่อลองแพ็กเกจรุ่นใหม่ (Package Version จะต่อท้ายด้วย `+ CSV`)
+ส่วน **ขั้นสูง** ใช้ไฟล์ IC แบบเดิม (Price_Change_Template: noCT_Input หรือ CT_Input ตามที่ Sourcing แก้หลังรีเฟรช อ่านตาม `costsaving/legacy.py` ต้องกรอก Key Date ที่หน้าเว็บ) คู่กับ CSV PO หรือใช้ไฟล์ master / CSV แทนตารางในแพ็กเกจเพื่อลองแพ็กเกจรุ่นใหม่ (Package Version จะต่อท้ายด้วย `+ CSV`)
 
 **ทีมข้อมูล** อัปโหลดไฟล์ master (dimMasterInfo_Raw หรือ MasterInfo_ActiveTH, dimUOM_Raw, dimPlant_Raw, dimPlantGroup) และ CSV PO line เลือก Commodity แล้วกด **สร้าง template** ได้ไฟล์ `IC_Template_{Package Version}.xlsx` นำไปวางใน SharePoint แทนรุ่นเดิม ช่วง spending ค่าเริ่มต้นคือถึง PO Date ล่าสุดในไฟล์ ย้อนหลัง 13 เดือน
 
@@ -39,7 +39,6 @@ template เป็นไฟล์เดียวเหมือนไฟล์ I
 | ชีต | ใครกรอก | เนื้อหา |
 |---|---|---|
 | Header, Lines | Sourcing | การต่อรองหนึ่งครั้ง (มี dropdown จาก config) |
-| CT_Leadtime | Sourcing เฉพาะ Method ที่เป็น CT | Leadtime และ Minimum Order ราย Hospital Area (`dim_method.csv` คอลัมน์ `is CT`) |
 | dimPlantGroup | ทีมข้อมูลตั้งต้น, Sourcing เพิ่มได้ | กลุ่ม Plant |
 | Package_Info | ทีมข้อมูล | Package Version, Commodity, ช่วง spending |
 | dimMasterInfo_Raw, dimUOM_Raw, dimPlant_Raw | ทีมข้อมูล | master |
@@ -48,9 +47,9 @@ template เป็นไฟล์เดียวเหมือนไฟล์ I
 
 ทุกตารางเริ่มที่ A1 เพื่อให้แอปอ่านแบบ streaming ได้ แอปเก็บไว้เฉพาะ PO line ของ Material ที่อยู่ใน Lines จึงใช้หน่วยความจำน้อยแม้ fact_po_lines มีเป็นแสนแถว แต่ยังต้อง parse ทุกแถว (ประมาณ 25 วินาทีต่อ 160,000 แถวบน CPython)
 
-IC_Check ของแพ็กเกจ: **P01** spending ในแพ็กเกจเก่ากว่า Key Date เกิน 45 วัน, **P02** spending ไม่ครบ 12 เดือนก่อน Key Date, **P03** Commodity ใน Header ไม่ตรงกับแพ็กเกจ (Error) · CT_Leadtime: **W09** Method เป็น CT แต่ไม่กรอก, **W10** กรอกแต่ไม่ใช่ CT
+IC_Check ของแพ็กเกจ: **P01** spending ในแพ็กเกจเก่ากว่า Key Date เกิน 45 วัน, **P02** spending ไม่ครบ 12 เดือนก่อน Key Date, **P03** Commodity ใน Header ไม่ตรงกับแพ็กเกจ (Error)
 
-ไฟล์ **IC Processed** เก็บสิ่งที่คีย์ (Header, Lines, CT_Leadtime, dimPlantGroup), Out_PD, IC_Check และชีต Processed ที่มี Package Version และ **Input Checksum (SHA-256)** ของสิ่งที่คีย์ โหมด PD จะใช้ checksum นี้ตรวจว่าไฟล์ถูกแก้หลังประมวลผลหรือไม่ ไฟล์นี้ไม่คัดลอกแพ็กเกจไปด้วย จึงเล็ก
+ไฟล์ **IC Processed** เก็บสิ่งที่คีย์ (Header, Lines, dimPlantGroup), Out_PD, dimPlant_Raw, IC_Check, ตาราง Collect (หนึ่งแถวต่อขั้น FOC และ Project Name `[Strategy]Method_ชื่อ` แบบไฟล์เดิม) และชีต Processed ที่มี Package Version และ **Input Checksum (SHA-256)** ของสิ่งที่คีย์ โหมด PD จะใช้ checksum นี้ตรวจว่าไฟล์ถูกแก้หลังประมวลผลหรือไม่ ไฟล์นี้ไม่คัดลอกแพ็กเกจไปด้วย จึงเล็ก
 
 ### ข้อมูลไปที่ไหน
 
@@ -63,7 +62,7 @@ IC_Check ของแพ็กเกจ: **P01** spending ในแพ็กเ�
 ## ไหลอย่างไร
 
 ```
-template IC + แพ็กเกจ      Header, Lines, CT_Leadtime, dimPlantGroup + master + fact_po_lines + dimMaterial
+template IC + แพ็กเกจ      Header, Lines, dimPlantGroup + master + fact_po_lines + dimMaterial
 (หรือแบบเดิม: ไฟล์ IC + ไฟล์ master + CSV PO line prc_spending_sap_{year}.csv)
                            อ่านเฉพาะ PO line ของ Material ที่อยู่ใน Lines
           │
@@ -71,10 +70,9 @@ template IC + แพ็กเกจ      Header, Lines, CT_Leadtime, dimPlantGro
    agreement_line  (grain: Line × Plant; Plant Group แตกเป็นรายโรงพยาบาล, ว่าง = All Plant)
           │  Baseline = min(LPP Hospital, SDC, Dr. Pharma) หยุดค่าที่ Key Date
           ▼
-   *_IC_Processed.xlsx   Header, Lines, Out_PD, Out_PD_Leadtime, checksum → SharePoint → PD
+   *_IC_Processed.xlsx   Summary, IC_Check, Header, Lines, Input_forSavingCollect, Out_PD, dimPlant_Raw,
+                         Out_Contract, checksum → SharePoint (approve) → IC Collected (Project) และ PD
    *_for_Contract.xlsx   หนึ่งชีตต่อ Vendor (Ariba)       → Sourcing import
-   *_for_Collect.xlsx    ตาราง Input_forSavingCollect    → ไฟล์ Cost Saving
-   *_for_Summary.xlsx    Summary, Summary_ByPlant, Summary_Lines, IC_Check
 ```
 
 ## โครงสร้าง

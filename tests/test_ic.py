@@ -45,9 +45,11 @@ def test_foc_deepest_tier_and_invalid():
 def test_row_counts(run):
     result, _ = run
     counts = {k: len(result[k]) for k in
-              ('agreement_line', 'Out_PD', 'Out_Contract', 'Out_Collect', 'Summary_Lines', 'Out_PD_Leadtime')}
-    assert counts == {'agreement_line': 12, 'Out_PD': 12, 'Out_Contract': 11, 'Out_Collect': 10,
-                      'Summary_Lines': 11, 'Out_PD_Leadtime': 0}  # Renegotiation is not CT (D56)
+              ('agreement_line', 'Out_PD', 'Out_Contract', 'Out_Collect', 'Summary_Lines')}
+    # Collect: 10 collected lines + one row per FOC tier as the current IC file writes it (Q4):
+    # line 1 '10F1' → 1F0 + 10F1, line 2 '10F1,20F3' → 1F0 + 10F1 + 20F3
+    assert counts == {'agreement_line': 12, 'Out_PD': 12, 'Out_Contract': 11, 'Out_Collect': 13,
+                      'Summary_Lines': 11}
 
 
 # ---------------------------------------------------------------- Baseline (D11, D13, D14, P4)
@@ -123,7 +125,6 @@ def test_check_codes(run):
         ('Error', 'E10', 7), ('Error', 'E02', 8), ('Error', 'E04', 9),
         ('Warning', 'W01', 3), ('Warning', 'W01', 5), ('Warning', 'W01', 8),
         ('Warning', 'W02', 4), ('Warning', 'W02', 9), ('Warning', 'W07', 4), ('Warning', 'W08', 8),
-        ('Warning', 'W10', None),  # CT_Leadtime filled but Renegotiation is not CT (D56)
     }
     assert got == expected
     # file-level reminder, shown once (not once per line)
@@ -187,20 +188,41 @@ def test_pool_purchase_uses_transfer_price():
     assert not any(result['IC_Check']['Level'] == 'Error')
 
 
-# ---------------------------------------------------------------- CT_Leadtime only for CT (D56)
-def ct_header():
-    return [(f, {'Method': 'Yearly Contract'}.get(f, v)) for f, v in fx.HEADER]
-
-
-def test_ct_method_passes_leadtime_to_pd():
-    result, _ = process_ic(fx.as_file(fx.ic_workbook_bytes(header=ct_header())), po_files=[fx.as_file(fx.po_csv_bytes())])
-    assert len(result['Out_PD_Leadtime']) == 2
+# ---------------------------------------------------------------- CT_Leadtime is not passed on (Q12, 2026-11-08)
+def test_no_leadtime_output_and_no_ct_rule():
+    header = [(f, {'Method': 'Yearly Contract'}.get(f, v)) for f, v in fx.HEADER]
+    result, files = process_ic(fx.as_file(fx.ic_workbook_bytes(header=header)), po_files=[fx.as_file(fx.po_csv_bytes())])
+    assert 'Out_PD_Leadtime' not in result
     assert not result['IC_Check']['Message'].str[:3].isin(['W09', 'W10']).any()
 
 
-def test_ct_method_without_leadtime_warns(monkeypatch):
-    from costsaving import sample
-    monkeypatch.setattr(sample, 'LEADTIME', [])
-    result, _ = process_ic(fx.as_file(fx.ic_workbook_bytes(header=ct_header())), po_files=[fx.as_file(fx.po_csv_bytes())])
-    assert len(result['Out_PD_Leadtime']) == 0
-    assert result['IC_Check']['Message'].str.startswith('W09').any()
+# ---------------------------------------------------------------- Collect in the current shape (Q4, 2026-11-08)
+def test_collect_one_row_per_foc_tier_like_the_current_file(run):
+    result, _ = run
+    c = result['Out_Collect']
+    two = c[c['Material Code'] == 'TST-MED-0002'].sort_values('Final Price Base Unit', ascending=False)
+    assert list(two['Final FOC']) == ['1F0', '10F1', '20F3']
+    assert list(two['Nego FOC']) == ['1F0', '10F1', '10F1']  # deepest Nego tier not above the Final tier
+    assert list(two['Final Price Base Unit']) == [45.0, 40.91, 39.13]  # 45 × buy ÷ (buy + free), D53
+    assert list(two['Nego Price Base Unit']) == [47.0, 42.73, 42.73]
+    assert list(two['Avoid Base Unit']) == [2.0, 1.82, 3.6]
+    assert (two['PPV Base Unit'] == (two['First Price Base Unit'] - two['Final Price Base Unit']).round(2)).all()
+    no_foc = c[c['Material Code'] == 'TST-MED-0005']
+    assert len(no_foc) == 1 and no_foc['Final FOC'].isna().all()  # no FOC → one row, FOC blank
+    assert set(c['Project Name']) == {'[Negotiation]Renegotiation_TEST Renegotiation Vendor A'}
+
+
+def test_quit_and_inactive_need_no_price_and_are_not_collected():
+    lines = [dict(x, final=None) if x['line'] == 11 else x for x in fx.LINES]  # line 11 = Inactive Vendor
+    result, _ = process_ic(fx.as_file(fx.ic_workbook_bytes(lines=lines)), po_files=[fx.as_file(fx.po_csv_bytes())])
+    check = result['IC_Check']
+    assert not ((check['Line No'] == 11) & check['Message'].str.startswith('E03')).any()
+    assert 11 not in set(result['Out_Collect']['Line No']) and 11 in set(result['Out_PD']['Line No'])
+
+
+def test_w04_reference_material_with_another_base_unit():
+    lines = [dict(x, ref='TST-MED-0003') if x['line'] == 6 else x for x in fx.LINES]  # TUB vs TAB
+    result, _ = process_ic(fx.as_file(fx.ic_workbook_bytes(lines=lines)), po_files=[fx.as_file(fx.po_csv_bytes())])
+    check = result['IC_Check']
+    assert ((check['Line No'] == 6) & check['Message'].str.startswith('W04')).any()
+    assert not check['Message'].str.startswith('W04').sum() > 1

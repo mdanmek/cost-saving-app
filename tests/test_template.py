@@ -50,11 +50,11 @@ def test_error_lines_are_still_found_with_a_one_commodity_package():
 # ---------------------------------------------------------------- the template file
 def test_blank_template_layout():
     wb = load_workbook(io.BytesIO(sample.template_bytes(blank=True)))
-    assert wb.sheetnames[:5] == ['README', 'Header', 'Lines', 'CT_Leadtime', 'dimPlantGroup']
+    assert wb.sheetnames[:4] == ['README', 'Header', 'Lines', 'dimPlantGroup']  # no CT_Leadtime (Q12)
     assert {'Package_Info', 'dimMasterInfo_Raw', 'dimUOM_Raw', 'dimPlant_Raw', 'fact_po_lines', 'dimMaterial',
             'dimPlantGroup_Official', 'lists'} <= set(wb.sheetnames)
     assert wb['lists'].sheet_state == 'hidden'
-    for name in ('Header', 'Lines', 'CT_Leadtime', 'dimPlantGroup', 'fact_po_lines'):
+    for name in ('Header', 'Lines', 'dimPlantGroup', 'fact_po_lines'):
         assert name in wb[name].tables, name
         assert wb[name]['A1'].value is not None  # every table starts at A1 (streaming read)
     header = {r[0]: r[1] for r in wb['Header'].iter_rows(min_row=2, values_only=True)}
@@ -158,7 +158,7 @@ def test_processed_file_has_inputs_out_pd_and_checksum():
     result, files = process_ic(sample.template_bytes(lines=CLEAN))
     data = next(v for k, v in files.items() if k.endswith('_IC_Processed.xlsx'))
     wb = load_workbook(io.BytesIO(data))
-    assert {'Processed', 'Summary', 'Header', 'Lines', 'forSavingCollect', 'Out_PD', 'Out_PD_Leadtime', 'Out_Contract',
+    assert {'Processed', 'Summary', 'Header', 'Lines', 'forSavingCollect', 'Out_PD', 'dimPlant_Raw', 'Out_Contract',
             'IC_Check', 'dimPlantGroup'} <= set(wb.sheetnames)
     assert 'fact_po_lines' not in wb.sheetnames  # the package is not copied
     s = stamp(files)

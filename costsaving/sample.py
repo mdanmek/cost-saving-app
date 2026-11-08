@@ -73,31 +73,23 @@ LINES = [
     dict(line=10, mat='TST-MED-0008', uom='BX10T', final=45, manual=50, trade='Testocet', pd='Update'),
     dict(line=11, mat='TST-MED-0096', uom='BX30T', final=300, trade='Testolol', pd='Inactive Vendor'),
 ]
-LINE_HEADERS = [
-    'Line No', 'Material Code', 'Material Description', 'Order Unit', 'UOM Description', 'a0',
-    'Final Price', 'Final FOC', 'Supplier Product Code', 'Supplier Product Name', 'Trade Name',
-    'TMT Code or UCEP Code', 'Country of Manufacture', 'Registration No.', 'Remark', 'Local or Import', 'Quotation Date',
-    'Vendor ID', 'Plant Group', 'PD Action', 'Nego Price', 'Nego FOC', 'Per for Setup',
-    'Transfer Price', 'LPP SaveDrug', 'LPP DrPharma', 'Reference Material Code', 'LPP Hospital Manual',
-    'Growth %', 'Fix Vendor Requested', 'UCEP / Note for Info',
-    'Registration Type', 'Special Feature', 'Standard Qty', 'Minimum Qty',
-]
 PO_HEADERS = ['Commodity Full', 'Plant', 'Plant Name', 'PO Number', 'PO Date', 'Material Code', 'Vendor ID',
               'Order Unit', 'Base Unit', 'Spending Quantity (Base Unit)', 'Spending Amount THB']
 
 
 def lines_df(lines=None):
+    from .ic import LINE_COLUMNS
     rows = []
     for x in lines or LINES:
-        rows.append([
-            x['line'], x['mat'], None, x['uom'], None, None,
-            x['final'], x.get('ffoc'), None, None, x.get('trade'),
-            None, 'Thailand', 'REG-TEST', None, 'Local', date(2026, 10, 30),
-            x.get('vendor'), x.get('pg'), x.get('pd'), x.get('nego'), x.get('nfoc'), None,
-            x.get('transfer'), None, None, x.get('ref'), x.get('manual'),
-            None, None, None, None, None, None, None,
-        ])
-    return pd.DataFrame(rows, columns=LINE_HEADERS)
+        rows.append({
+            'Line No': x['line'], 'PD Action': x.get('pd'), 'Plant Group': x.get('pg'), 'Material Code': x['mat'],
+            'Vendor ID': x.get('vendor'), 'Order Unit': x['uom'], 'Reference Material Code': x.get('ref'),
+            'Nego Price': x.get('nego'), 'Nego FOC': x.get('nfoc'), 'Final Price': x.get('final'), 'Final FOC': x.get('ffoc'),
+            'Local or Import': 'Local', 'Trade Name': x.get('trade'), 'Quotation Date': date(2026, 10, 30),
+            'Transfer Price': x.get('transfer'), 'LPP Hospital Manual': x.get('manual'),
+            'Registration No.': 'REG-TEST', 'Country of Manufacture': 'Thailand',
+        })
+    return pd.DataFrame(rows, columns=LINE_COLUMNS)
 
 
 def po_df(po=None):
@@ -113,9 +105,6 @@ def ic_workbook_bytes(header=None, lines=None, with_masters=True):
     add_table_sheet(wb, 'Header', pd.DataFrame(header or HEADER, columns=['Field', 'Value']), 'Header')
     add_table_sheet(wb, 'Lines', lines_df(lines), 'Lines',
                     {'Material Code', 'Vendor ID', 'Reference Material Code', 'Final FOC', 'Nego FOC', 'Order Unit'})
-    add_table_sheet(wb, 'CT_Leadtime', pd.DataFrame(LEADTIME, columns=[
-        'No.', 'Vendor ID', 'Hospital Area', 'Product Type', 'a0', 'Minimum Order (Baht)', 'Leadtime (Days)', 'Remark']),
-        'CT_Leadtime')
     if with_masters:
         add_master_sheets(wb)
     return to_bytes(wb)
@@ -158,7 +147,7 @@ def master_frames():
     }
 
 
-def template_bytes(header=None, lines=None, leadtime=None, blank=False, spend_from=None, spend_to=None):
+def template_bytes(header=None, lines=None, blank=False, spend_from=None, spend_to=None):
     '''The sample as the data team would publish it: template + package, built by template.build_template.
     blank=True gives the empty template (only Commodity set), as Sourcing downloads it.'''
     from datetime import datetime, timezone
@@ -171,7 +160,6 @@ def template_bytes(header=None, lines=None, leadtime=None, blank=False, spend_fr
         spend_from=spend_from, spend_to=spend_to,
         header=None if blank else (header or HEADER),
         lines=None if blank else lines_df(lines),
-        leadtime=None if blank else (LEADTIME if leadtime is None else leadtime),
         created=datetime(2026, 11, 6, tzinfo=timezone.utc),
     )
     return data

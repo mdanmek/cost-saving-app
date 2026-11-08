@@ -1,5 +1,5 @@
-'''The current IC file (Price_Change_Template) keyed as Sourcing does it today: noCT_Input, or CT_Vendor +
-CT_Leadtime + refreshed CT_Input. Both paths must give the same numbers as the template (fictitious data).'''
+'''The current IC file (Price_Change_Template) keyed as Sourcing does it today: noCT_Input, or CT_Input
+(refreshed from CT_Vendor, then edited by Sourcing). Both paths must give the same numbers as the template (fictitious data).'''
 from datetime import date
 import io
 
@@ -60,17 +60,18 @@ def test_ct_path_is_processed_like_noct():
     assert (a['Avoid'] == 0).all()
 
 
-def test_ct_carries_registration_country_and_leadtime():
+def test_ct_carries_registration_and_country_from_the_vendor_form():
     result, _ = legacy('CT', CT_LINES, method='Yearly Contract')
     out = result['Out_PD']
     assert set(out['Registration No.']) == {'REG-TEST'} and set(out['Country of Manufacture']) == {'Thailand'}
-    lt = result['Out_PD_Leadtime']
-    assert len(lt) == len(sample.LEADTIME) and set(lt['Vendor ID']) == {sample.V1}
+    assert 'Out_PD_Leadtime' not in result  # CT_Leadtime is not passed on (Q12)
 
 
-def test_ct_input_not_refreshed_is_an_error():
+def test_ct_input_is_the_starting_point_even_when_edited():
+    '''Sourcing may add or delete rows in CT_Input after the refresh (2026-11-08): no error, the edited table is used.'''
     result, _ = legacy('CT', CT_LINES, method='Yearly Contract', stale_ct=True)
-    assert any(m.startswith('L02') for m in errors(result))
+    assert errors(result) == []
+    assert result['Out_PD']['Line No'].nunique() == len(CT_LINES) - 1  # one row was deleted after the refresh
 
 
 def test_ct_rows_without_method_and_pd_are_skipped_with_a_warning():
@@ -128,6 +129,5 @@ def test_processed_file_checksum_round_trips(mode):
     stamp = dict(zip(read_table(wb, 'Processed')['Field'], read_table(wb, 'Processed')['Value']))
     back = ICInputs(header=read_header(wb), lines=read_table(wb, 'Lines'), masterinfo=None, uom=None, plant=None,
                     plant_group=read_table(wb, 'dimPlantGroup', required=False), po_lines=None,
-                    leadtime=read_table(wb, 'CT_Leadtime', required=False),
                     package={'Package Version': stamp['Package Version']})
     assert input_checksum(back) == stamp['Input Checksum (SHA-256)'] == input_checksum(result['inputs'])

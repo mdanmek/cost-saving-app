@@ -4,17 +4,16 @@ What Sourcing keys in that file (checked on the structure of the real file, no v
 
     varCT = noCT   sheet noCT_Input, table Input_noCT: the typed columns only (NOCT_TYPED_COLUMNS);
                    Commodity and Saving Strategy are cells above the table (names Commodity, SavingStrategy)
-    varCT = CT     sheet CT_Vendor, table CT: the vendor quote form (+ vendor in cell varVendor
-                   'VendorID_VendorName', quotation date above the table)
-                   sheet CT_Leadtime, table CT_Leadtime
-                   sheet CT_Input, query table Input_CT refreshed from CT, then Method / PD / Plant Group typed
-                   in it (names Commodity_CT, SavingStrategy_CT above the table)
+    varCT = CT     CT_Vendor and CT_Leadtime are what the vendor sends back. CT_Input (query table Input_CT)
+                   maps it to the current Info Record (First Price) so Sourcing does not map by hand, then
+                   Sourcing types Method / PD / Plant Group and may change values or add / delete rows there.
+                   So CT_Input, as Sourcing left it, is the starting point (2026-11-08), like noCT_Input.
 
-Input_CT and Input_noCT have the same 48 columns, so both paths become ONE source shaped like the typed
-columns of Input_noCT, then go through the same process as the template (ic.run_ic). Formula columns
-(Order Unit Text, Conversion, Base Unit, base prices, PPV, Expected, Combination ID, Plant List) are not
-read: the app computes them from the masters. CT only adds what Input_CT does not carry
-(country of manufacture, registration no.) and the leadtime table.
+Input_CT and Input_noCT have the same 48 columns: both are read the same way, as ONE source shaped like
+the typed columns of Input_noCT, then go through the same process as the template (ic.run_ic).
+Formula columns (Order Unit Text, Conversion, Base Unit, base prices, PPV, Expected, Combination ID,
+Plant List) are not read: the app computes them from the masters. CT_Leadtime is not used (Q12).
+CT_Vendor only adds what Input_CT does not carry (country of manufacture, registration no.), when found.
 
 First Price / First FOC are read by the old file but not used: the Baseline is Min LPP (D12).
 The old file has no Key Date (the Baseline was First Price), so the caller passes it.
@@ -22,7 +21,7 @@ The old file has no Key Date (the Baseline was First Price), so the caller passe
 import pandas as pd
 
 from .config import clean, to_text
-from .ic import LINE_COLUMNS, to_date
+from .ic import LINE_COLUMNS, records, to_date
 from .readers import read_table
 
 INPUT_TABLE = {'CT': 'Input_CT', 'noCT': 'Input_noCT'}
@@ -36,8 +35,6 @@ NOCT_TYPED_COLUMNS = [
     'Effective Date', 'Valid Date', 'Project Name', 'Local or Import', 'Supplier Product Code',
     'Supplier Product Name', 'Trade Name', 'TMT Code or UCEP Code', 'Quotation Date', 'Remark',
 ]
-# columns of Input_CT that Sourcing types after the refresh; the rest comes from the query (table CT)
-CT_TYPED_COLUMNS = ['Method', 'PD', 'Plant Group']
 # vendor quote form (table CT) → names used by the app; only what Input_CT does not carry
 CT_FORM_EXTRA = {'ประเทศผู้ผลิตสินค้า': 'Country of Manufacture', 'Regulatory no. (เลขทะเบียน อย.)': 'Registration No.'}
 # per-file values: the app keys them once in Header, the old file repeats them on every row
@@ -71,7 +68,7 @@ def _distinct(values):
 
 
 def read_legacy(workbook, key_date=None):
-    '''Current IC file → (header dict, lines DataFrame in LINE_COLUMNS, leadtime DataFrame or None, messages).
+    '''Current IC file → (header dict, lines DataFrame in LINE_COLUMNS, messages).
     messages = [(level, upload, text)] for IC_Check.'''
     messages = []
     var_ct = to_text(name_value(workbook, 'varCT'))
@@ -79,41 +76,26 @@ def read_legacy(workbook, key_date=None):
     if var_ct not in INPUT_TABLE:
         messages.append(('Error', 'Header', f"L00 varCT (Summary) ต้องเป็น CT หรือ noCT แต่ได้ '{var_ct}' ใช้ noCT ไปก่อน"))
     source = read_table(workbook, INPUT_TABLE[mode])
-    keep = NOCT_TYPED_COLUMNS
-    for col in keep:
+    for col in NOCT_TYPED_COLUMNS:
         if col not in source:
             source[col] = None
-    source = source[keep].copy()
+    source = source[NOCT_TYPED_COLUMNS].copy()
     source = source[source['Material Code'].map(to_text).notna()].reset_index(drop=True)
 
-    leadtime = None
     extra = {}
     if mode == 'CT':
-        # every item of the vendor form comes into Input_CT; an item without Method and PD was not part of
-        # this negotiation: the current file drops it (no Combination ID), so it is left out here too
+        # an item of the vendor form that Sourcing left without Method and PD is not part of this
+        # negotiation: the current file drops it (no Combination ID), so it is left out here too
         blank = source['Method'].map(to_text).isna() & source['PD'].map(to_text).isna()
         if blank.any():
             messages.append(('Warning', 'CT_Input', f'L03 ข้าม {int(blank.sum())} รายการใน CT_Input ที่ไม่ได้กรอก Method และ PD '
                              '(ไฟล์เดิมก็ไม่นับรายการเหล่านี้) ถ้าต้องการให้นับ กรอก Method และ PD'))
-        form_keys_all = {(to_text(m), to_text(u)) for m, u in zip(source['Material Code'], source['Order Unit'])}
         source = source[~blank].reset_index(drop=True)
         form = read_table(workbook, 'CT', required=False)
-        if form is None:
-            messages.append(('Error', 'CT_Vendor', 'L02 ไม่พบตาราง CT ในชีต CT_Vendor'))
-        else:
-            form = form[form['Material Code'].map(to_text).notna()]
-            # one row per Material × Order Unit: a duplicate in the form must not add rows (setdefault)
-            for r in form.to_dict('records'):
-                key = (to_text(r.get('Material Code')), to_text(r.get('Order Unit')))
+        for r in records(form):
+            key = (to_text(r.get('Material Code')), to_text(r.get('Order Unit')))
+            if key[0]:  # one row per Material × Order Unit: a duplicate in the form must not add rows
                 extra.setdefault(key, {v: clean(r.get(k)) for k, v in CT_FORM_EXTRA.items()})
-            if form_keys_all != set(extra):
-                messages.append(('Error', 'CT_Input', 'L02 รายการใน CT_Input ไม่ตรงกับตาราง CT ใน CT_Vendor: '
-                                 'รีเฟรช CT_Input หลังแก้ CT_Vendor แล้วกรอก Method / PD / Plant Group ใหม่'))
-        leadtime = read_table(workbook, 'CT_Leadtime', required=False)
-        if leadtime is not None:
-            vendor = to_text(name_value(workbook, 'varVendor'))
-            leadtime = leadtime.copy()
-            leadtime['Vendor ID'] = None if vendor is None else vendor.split('_', 1)[0]
 
     commodity_name, strategy_name = HEADER_NAMES[mode]
     header = {'Commodity': to_text(name_value(workbook, commodity_name)),
@@ -133,16 +115,16 @@ def read_legacy(workbook, key_date=None):
     for i, r in enumerate(source.to_dict('records'), 1):
         x = extra.get((to_text(r['Material Code']), to_text(r['Order Unit'])), {})
         rows.append({
-            'Line No': i, 'Material Code': r['Material Code'], 'Material Description': r['Material Description'],
-            'Order Unit': r['Order Unit'], 'Final Price': r['Final Price'], 'Final FOC': r['Final FOC'],
+            'Line No': i, 'PD Action': r['PD'], 'Plant Group': r['Plant Group'], 'Material Code': r['Material Code'],
+            'Vendor ID': r['Vendor ID'], 'Order Unit': r['Order Unit'],
+            # Alternative Material Code / Order Unit = the old code / unit of a moved item (Q14)
+            'Reference Material Code': r['Alternative Material Code'], 'Reference Order Unit': r['Alternative Order Unit'],
+            'Per for Setup': r['Per for Setup'], 'Nego Price': r['Nego Price'], 'Nego FOC': r['Nego FOC'],
+            'Final Price': r['Final Price'], 'Final FOC': r['Final FOC'], 'Local or Import': r['Local or Import'],
             'Supplier Product Code': r['Supplier Product Code'], 'Supplier Product Name': r['Supplier Product Name'],
             'Trade Name': r['Trade Name'], 'TMT Code or UCEP Code': r['TMT Code or UCEP Code'],
+            'Quotation Date': to_date(r['Quotation Date']), 'Remark': r['Remark'],
             'Country of Manufacture': x.get('Country of Manufacture'), 'Registration No.': x.get('Registration No.'),
-            'Remark': r['Remark'], 'Local or Import': r['Local or Import'], 'Quotation Date': to_date(r['Quotation Date']),
-            'Vendor ID': r['Vendor ID'], 'Plant Group': r['Plant Group'], 'PD Action': r['PD'],
-            'Nego Price': r['Nego Price'], 'Nego FOC': r['Nego FOC'], 'Per for Setup': r['Per for Setup'],
-            # Alternative Material Code = the old code of a moved material (assumption, Q4)
-            'Reference Material Code': r['Alternative Material Code'],
         })
     lines = pd.DataFrame(rows, columns=LINE_COLUMNS, dtype=object)
-    return header, lines, leadtime, messages
+    return header, lines, messages
