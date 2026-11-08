@@ -505,6 +505,20 @@ def _source_list(rows, zmmp1004, category_of, cat_by_name, method_mode, cfg, chk
                                  'Agreement': to_text(r['Agreement']), 'Agreement Item': to_text(r['Agreement Item']),
                                  'Fixed vendor': c('Fixed vendor') if fixed else c('Not Fixed vendor'),
                                  'Blocked': c('Blocked'), 'Materials Planning(MRP)': to_text(r['MRP'])}})
+    # SAP: one fixed source per Material × Plant, and one record per vendor in the same period
+    per_vendor, fixed_vendors = {}, {}
+    for x in new:
+        key = (x['row']['Material Code'], x['row']['Plant'])
+        per_vendor.setdefault(key + (x['row']['Vendor Key'],), []).append(x)
+        if x['fixed']:
+            fixed_vendors.setdefault(key, set()).add(x['row']['Vendor Key'])
+    for xs in per_vendor.values():
+        if len(xs) > 1:
+            for x in xs:
+                x['issue'] = join_messages([x['issue'], 'Vendor เดียวกันมีหลายแถวใน Material × Plant นี้ (เช่น หลาย Order Unit): Source List ชนกัน'])
+    for x in new:
+        if len(fixed_vendors.get((x['row']['Material Code'], x['row']['Plant']), ())) > 1:
+            x['issue'] = join_messages([x['issue'], 'มีหลาย Vendor ที่ต้อง fix ใน Material × Plant เดียวกัน (SAP fix ได้รายเดียว) เลือก Vendor ที่ fix ใน IC'])
     all_rows = new + kept
     bad_sets = {(x['row']['Material Code'], x['row'].get('Plant')) for x in all_rows if x['issue']}
     base, ready = [], []
@@ -585,6 +599,7 @@ def _info_record(rows, category_of, cat_by_name, me1l, dup_me1l, purch_group, ta
         }
         issue = [
             row.get('Expand Issue'),
+            'By Plant แต่ไม่มีรหัส Plant (Info Record ทำราย Plant, D34)' if not plant and not row.get('Expand Issue') else None,
             f"ไม่พบ Item Category '{category}' ใน item_category.csv" if not cat else None,
             'ไม่มี Conversion ของ Order Unit' if frac is None else None,
             'E03 Final Price ว่างหรือ ≤ 0' if not row['Final Price'] or row['Final Price'] <= 0 else None,
@@ -669,6 +684,8 @@ def _foc_add(rows, cat_by_name, cfg, chk):
             issue = [
                 'E09 Item Category นี้ไม่มีของแถม (consignment ไม่มี FOC, D35)' if cat.get('Allows FOC') is False else None,
                 f"E04 FOC ผิดรูปแบบหรือมีขั้นซ้ำ: {row['Final FOC']}" if not valid else None,
+                # a blank Plant means "all plants" in the FOC file: a By Plant line must never land there
+                'By Plant แต่ไม่มีรหัส Plant' if row.get('Plant Scope') == 'By Plant' and not row['Plant'] else None,
                 (f"ไม่มีเลข Contract ({row['Contract Match Type']}) — FOC ผูกกับ Contract (D34)"
                  if row['SAP Contract No.'] is None and row['Contract Match Type'] != 'Not needed' else None),
                 'ไม่มี Effective Date / Valid Date' if not row['Effective Date'] or not row['Valid Date'] else None,

@@ -254,3 +254,58 @@ def test_upload_files_layout(golden):
     assert sl.sheetnames == ['Load-SL', 'ME01 (manual)'] and sl['Load-SL']['B2'].number_format == '@'
     ir = load_workbook(io.BytesIO(golden.files['Upload_InfoRecord_TEST.xlsx']))['Template Info']
     assert [c.value for c in ir[1]][-1] == 'Client' and ir.max_row == 16
+
+
+# ---------------------------------------------------------------- review of #7 (2026-11-08)
+def loaded_reports(extra_me3l=()):
+    cfg = load_config()
+    _, reports = sample_pd.round_inputs()
+    loaded = {k: read_sap_report(v, k, cfg)[0] for k, v in reports.items()}
+    if extra_me3l:
+        loaded['ME3L'] = pd.concat([loaded['ME3L'], pd.DataFrame(list(extra_me3l), columns=loaded['ME3L'].columns)],
+                                   ignore_index=True)
+    return cfg, loaded
+
+
+def me3l_item(no, item, vendor, mat, uom, plant=None):
+    from datetime import datetime
+    return {'Doc Type': 'ZARB', 'Contract No.': no, 'Contract Item': item, 'Valid from': datetime(2026, 12, 1),
+            'Valid to': datetime(2027, 11, 30), 'Plant': plant, 'Material Code': mat, 'Vendor ID': vendor,
+            'Order Unit': uom, 'Deletion Indicator': None}
+
+
+def test_by_plant_line_without_plant_never_goes_to_all_plants():
+    cfg, loaded = loaded_reports()
+    f = read_processed('c.xlsx', sample_pd.processed_bytes('MED-20261201-001'))
+    f.agreement_id, f.contract_numbers = 'C-1', ['8199000001']
+    f.out_pd.loc[f.out_pd['Line No'] == 4, 'Plant'] = None  # By Plant line, FOC 10F2
+    res = run_setup([f], loaded, cfg)
+    assert res['Template Info']['Plant'].notna().all()
+    assert 'TST-MED-0004' not in set(res['Cont. Add No Plant']['Material'])
+    assert res['Upload_Check']['Message'].str.startswith('By Plant แต่ไม่มีรหัส Plant').any()
+
+
+def test_only_one_fixed_vendor_per_material_and_plant():
+    cfg, loaded = loaded_reports([me3l_item('8199000002', '2', 'T900000009', 'TST-MSP-0001', 'BOX')])
+    f = read_processed('b.xlsx', sample_pd.processed_bytes('MSP-20261201-001'))
+    f.agreement_id, f.contract_numbers = 'B-1', ['8199000002']
+    second = f.out_pd.iloc[[0]].copy()
+    second['Vendor ID'], second['Line No'] = 'T900000009', 3  # second Bidding winner: fixed by Fix Vendor Methods
+    f.out_pd = pd.concat([f.out_pd, second], ignore_index=True)
+    res = run_setup([f], loaded, cfg)
+    sl = res['Load-SL']
+    assert sl[sl['Material'] == 'TST-MSP-0001'].empty  # whole set waits
+    assert res['Upload_Check']['Message'].str.contains('หลาย Vendor ที่ต้อง fix').any()
+
+
+def test_one_source_list_row_per_vendor():
+    cfg, loaded = loaded_reports([me3l_item('8199000001', '5', 'T900000001', 'TST-MED-0003', 'BOX', 'T101')])
+    f = read_processed('d.xlsx', sample_pd.processed_bytes('MED-20261201-001'))
+    f.agreement_id, f.contract_numbers = 'D-1', ['8199000001']
+    other_unit = f.out_pd.iloc[[2]].copy()  # line 3 (TST-MED-0003, T101) again with another Order Unit
+    other_unit['Order Unit'], other_unit['Line No'] = 'BOX', 9
+    f.out_pd = pd.concat([f.out_pd, other_unit], ignore_index=True)
+    res = run_setup([f], loaded, cfg)
+    sl = res['Load-SL']
+    assert sl[(sl['Material'] == 'TST-MED-0003') & (sl['Plant'] == 'T101')].empty
+    assert res['Upload_Check']['Message'].str.contains('Vendor เดียวกันมีหลายแถว').any()
