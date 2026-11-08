@@ -125,6 +125,9 @@ class FakeStreamlit(types.ModuleType):
     def date_input(self, *a, **k):
         return None
 
+    def data_editor(self, data, **k):
+        return data
+
     def select_slider(self, label, options, value=None, **k):
         return value
 
@@ -228,6 +231,17 @@ def test_benchmark_small():
     assert problem is None and n >= 2000 and [k for k, _ in timings][1].startswith('ประมวลผล') and size_mb > 0
 
 
-def test_page_pd_mode_is_a_placeholder(monkeypatch):
+def test_page_pd_mode_waits_for_uploads(monkeypatch):
     fake = run_page(FakeStreamlit(choice=0, mode=2), monkeypatch)
-    assert fake.downloads == [] and not fake.session_state
+    assert fake.downloads == [] and 'pd_run' not in fake.session_state
+
+
+def test_page_pd_mode_sample_enables_the_four_downloads(monkeypatch):
+    fake = run_page(FakeStreamlit(choice=1, mode=2), monkeypatch)
+    assert len(fake.downloads) == 4 and not any(disabled for _, disabled, _ in fake.downloads)
+    assert all(size > 0 for _, _, size in fake.downloads)
+
+
+def test_page_pd_mode_error_disables_downloads(monkeypatch):
+    fake = run_page(FakeStreamlit(choice=2, mode=2), monkeypatch)
+    assert fake.downloads and all(disabled for _, disabled, _ in fake.downloads)

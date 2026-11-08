@@ -116,3 +116,50 @@ def write_for_contract(result):
         part['Item Number'] = range(1, len(part) + 1)
         add_table_sheet(wb, f'Contract_{vendor}', part, f'Contract_{i}', TEXT_CODES)
     return to_bytes(wb)
+
+
+# ---------------------------------------------------------------- PD setup mode
+def plain_sheet(wb, sheet_name, df):
+    '''Header in row 1, values from row 2, no Excel table: the layout of the PD upload templates.
+    Every value is written as text except numbers, so codes keep their leading zeros.'''
+    ws = wb.create_sheet(sheet_name[:31])
+    ws.append(list(df.columns))
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for row in df.itertuples(index=False):
+        values = [_cell_value(v) for v in row]
+        ws.append(values)
+        for cell in ws[ws.max_row]:
+            if isinstance(cell.value, str):
+                cell.number_format = '@'
+    for i, col in enumerate(df.columns, 1):
+        ws.column_dimensions[get_column_letter(i)].width = min(max(len(str(col)) + 2, 10), 40)
+    return ws
+
+
+def write_setup_files(result, stamp):
+    '''Upload files of the PD setup mode (setup-outputs sections 1, 2, 2A) + Upload_Check.'''
+    from .setup import FOC_SHEETS
+    out = {}
+    wb = new_workbook()
+    plain_sheet(wb, 'Load-SL', result['Load-SL'])
+    plain_sheet(wb, 'ME01 (manual)', result['ME01 (manual)'])
+    out[f'Upload_SourceList_{stamp}.xlsx'] = to_bytes(wb)
+    wb = new_workbook()
+    plain_sheet(wb, 'Template Info', result['Template Info'])
+    out[f'Upload_InfoRecord_{stamp}.xlsx'] = to_bytes(wb)
+    wb = new_workbook()
+    for sheet in FOC_SHEETS.values():
+        plain_sheet(wb, sheet, result[sheet])
+    out[f'Upload_FOC_{stamp}.xlsx'] = to_bytes(wb)
+    wb = new_workbook()
+    add_table_sheet(wb, 'Upload_Check', result['Upload_Check'], 'Upload_Check', TEXT_CODES)
+    add_table_sheet(wb, 'Upload_PD_Manual', result['Upload_PD_Manual'], 'Upload_PD_Manual', TEXT_CODES)
+    lines = result['setup_lines']
+    keep = [c for c in ['IC File', 'Agreement ID', 'Line No', 'PD Type', 'PD Action', 'Commodity', 'Method', 'Plant Scope',
+                        'Plant', 'Material Code', 'Vendor ID', 'Order Unit', 'Final Price', 'Final FOC', 'Category',
+                        'Contract List', 'Contract Match Type', 'SAP Contract No.', 'SAP Contract Item',
+                        'Effective Date', 'Valid Date'] if c in lines]
+    add_table_sheet(wb, 'setup_lines', lines[keep] if keep else lines, 'setup_lines', TEXT_CODES)
+    out[f'Upload_Check_{stamp}.xlsx'] = to_bytes(wb)
+    return out

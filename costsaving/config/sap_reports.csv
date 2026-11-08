@@ -1,0 +1,42 @@
+Report,Field,Header
+ZMMP1004,Material Code,Material
+ZMMP1004,Plant,Plant
+ZMMP1004,Vendor ID,Vendor
+ZMMP1004,Valid from,Valid from
+ZMMP1004,Valid to,Valid to
+ZMMP1004,Purchase Org.,Purchase Org.
+ZMMP1004,Order Unit,Order Unit
+ZMMP1004,Agreement,Agreement
+ZMMP1004,Agreement Item,Agreement Item
+ZMMP1004,MRP,Materials Planning(MRP)
+ZMMP1004,Blocked,Blocked
+ZMMP1004,Fixed vendor,Fixed vendor
+ZMMR1019,Cond. Record No.,Cond.record no.
+ZMMR1019,Contract No.,Contract No.
+ZMMR1019,Vendor ID,Vendor
+ZMMR1019,Material Code,Material
+ZMMR1019,Plant,Plant
+ZMMR1019,Order Unit,Order Unit
+ZMMR1019,Valid from,Valid from
+ZMMR1019,Valid to,Valid to
+ZMMR1019,Scale no.,Scale no.
+ZMMR1019,Minimum qty,Minimum qty
+ZMMR1019,Add. quantity,Add. quantity
+ME1L,Item Category Text,Text for Item Cat.
+ME1L,Plant,Plant
+ME1L,Purchasing Group,Purchasing Group
+ME1L,Planned Deliv. Time,Planned Deliv. Time
+ME1L,Minimum Order Qty,Minimum Order Qty
+ME1L,Order Unit,Order Unit
+ME1L,Material Code,Material
+ME1L,Vendor ID,Supplier/Supplying Plant
+ME3L,Doc Type,Purchasing Doc. Type
+ME3L,Contract No.,Purchasing Document
+ME3L,Contract Item,Item
+ME3L,Valid from,Validity Per. Start
+ME3L,Valid to,Validity Period End
+ME3L,Plant,Plant
+ME3L,Material Code,Material
+ME3L,Vendor ID,Supplier/Supplying Plant
+ME3L,Order Unit,Order Unit
+ME3L,Deletion Indicator,Deletion Indicator
