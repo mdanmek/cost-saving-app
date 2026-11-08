@@ -309,3 +309,19 @@ def test_one_source_list_row_per_vendor():
     sl = res['Load-SL']
     assert sl[(sl['Material'] == 'TST-MED-0003') & (sl['Plant'] == 'T101')].empty
     assert res['Upload_Check']['Message'].str.contains('Vendor เดียวกันมีหลายแถว').any()
+
+
+def test_processed_file_without_lines_is_an_error_of_that_file_only():
+    from openpyxl import load_workbook as lw
+    data = sample_pd.processed_bytes('MED-20261201-002')
+    wb = lw(io.BytesIO(data))
+    del wb['Lines']
+    buf = io.BytesIO()
+    wb.save(buf)
+    files, reports = sample_pd.round_inputs()
+    files.append(('no_lines.xlsx', buf.getvalue(), 'X-9', ''))
+    r = run_round(files=files)
+    assert r.problem is None and r.errors == 1 and not r.can_download
+    c = r.result['Upload_Check']
+    assert c.loc[c['Level'] == 'Error', 'IC File'].tolist() == ['no_lines.xlsx']
+    assert len(r.result['Template Info']) == 15  # the other files are still processed

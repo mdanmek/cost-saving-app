@@ -181,6 +181,10 @@ def read_processed(name, data):
         return SetupFile(name=name, out_pd=pd.DataFrame(), checksum_ok=False,
                          problems=['ไม่ใช่ไฟล์ IC Processed (ไม่มีตาราง Out_PD / Processed) ประมวลผลในโหมด Sourcing ก่อน'])
     stamp = {to_text(r['Field']): clean(r['Value']) for r in records(stamp_df)}
+    missing = [t for t in ('Header', 'Lines') if read_table(wb, t, required=False) is None]
+    if missing:  # the checksum cannot be computed: this file only is refused, the others of the round go on
+        return SetupFile(name=name, out_pd=pd.DataFrame(), checksum_ok=False,
+                         problems=[f"ไฟล์ IC Processed ไม่มีตาราง {', '.join(missing)} ตรวจ checksum ไม่ได้ ให้ Sourcing ประมวลผลใหม่"])
     keyed = ICInputs(header=read_header(wb), lines=read_table(wb, 'Lines'), masterinfo=None, uom=None, plant=None,
                      plant_group=read_table(wb, 'dimPlantGroup', required=False), po_lines=None,
                      package={'Package Version': stamp.get('Package Version')})
@@ -293,6 +297,13 @@ def run_setup(files, reports, cfg: Config, tax_plants=(), vendor_tax=None):
             continue
         seen_items.add(key)
         me3l.append(r)
+    # index by Vendor × Material × Order Unit, values normalized once: a round of many files × a large ME3L
+    # would otherwise compare every line with every contract item (lines × items)
+    me3l_index = {}
+    for c in me3l:
+        c = dict(c, **{'_plant': to_text(c['Plant']), '_from': any_date(c['Valid from']), '_to': any_date(c['Valid to']),
+                       '_no': code_key(c['Contract No.'])})
+        me3l_index.setdefault((vendor_key(c['Vendor ID']), code_key(c['Material Code']), to_text(c['Order Unit'])), []).append(c)
 
     def category_of(row, plant):
         '''Item Category of a line at a plant from ME1L (Q11); no row → Standard.'''
@@ -340,14 +351,12 @@ def run_setup(files, reports, cfg: Config, tax_plants=(), vendor_tax=None):
     # ---- contract number and item per line (ME3L, typed numbers; D26, D35, D43, Q7, Q10)
     for row in lines:
         typed = row['Contract List']
-        cands = [c for c in me3l
-                 if vendor_key(c['Vendor ID']) == row['Vendor Key'] and code_key(c['Material Code']) == row['Material Code']
-                 and to_text(c['Order Unit']) == row['Order Unit']
-                 and (to_text(c['Plant']) is None or to_text(c['Plant']) == row['Plant'])
-                 and overlaps(any_date(c['Valid from']), any_date(c['Valid to']), row['Effective Date'], row['Valid Date'])
-                 and (not typed or code_key(c['Contract No.']) in typed)]
+        cands = [c for c in me3l_index.get((row['Vendor Key'], row['Material Code'], row['Order Unit']), [])
+                 if (c['_plant'] is None or c['_plant'] == row['Plant'])
+                 and overlaps(c['_from'], c['_to'], row['Effective Date'], row['Valid Date'])
+                 and (not typed or c['_no'] in typed)]
         if len(cands) > 1:  # several contracts over time: the one that starts on the Effective Date wins
-            same_start = [c for c in cands if any_date(c['Valid from']) == row['Effective Date']]
+            same_start = [c for c in cands if c['_from'] == row['Effective Date']]
             cands = same_start if len(same_start) == 1 else cands
         row['Contract Candidates'] = len(cands)
         if not row['Needs Contract']:

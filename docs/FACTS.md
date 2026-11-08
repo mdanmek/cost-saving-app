@@ -79,6 +79,8 @@
 | grain | ทุก join ใช้ key ที่ไม่ซ้ำ: ME3L ตัดซ้ำที่ Contract × Item, ZMMP1004 ที่ Material × Plant × Vendor × Valid from, ME1L ใช้แถวแรก (Note) · รายงานซ้ำสองเท่าได้ผลเท่าเดิม | `run_setup` | `test_duplicate_report_rows_do_not_add_upload_rows` · golden: `test_row_counts_match_expected_sheet` (FOC 4/1/1/0, Source List 9, ME01 1, Info Record 15) |
 | P24 | ชื่อหัวคอลัมน์ของรายงาน SAP อยู่ใน `config/sap_reports.csv` แก้ได้ไม่ต้องแก้โค้ด หาแถวหัวตารางเอง | `setup.read_sap_report` | `test_me3l_ignores_purchase_orders_and_reads_after_title_rows` |
 
+รีวิว #7 (2026-11-08): บรรทัด By Plant ที่ไม่มีรหัส Plant ไม่ออกเป็น Info Record / FOC แบบไม่มี Plant · Source List หนึ่ง Vendor fix ต่อ Material × Plant และหนึ่งแถวต่อ Vendor · ไฟล์ที่ขาด Header / Lines เป็น Error ของไฟล์นั้น · ความเร็ว: ME3L ทำ index ตาม Vendor × Material × Order Unit รอบสมมติ 40 ไฟล์ × 100 บรรทัด กับรายงานละ 40,000 แถว จาก 64 เหลือ 10 วินาทีบน CPython (ผลเท่าเดิม)
+
 Upload_Check: **Error** = ทั้งรอบห้ามดาวน์โหลด · **Warning** แยกชนิด `Issue` (แถวนี้ไม่อยู่ในไฟล์ upload), `Manual` (PD ทำเอง), `Note` (แถวไปได้ แต่มีช่องที่ต้องตรวจ)
 
 ยังไม่ได้ทำ / รอ: template ไฟล์ upload สำหรับงาน inactive (Q6 ข), P25 Standard / Minimum Qty ของเวชภัณฑ์, C11 Registration Type / Special Feature, ชื่อหัวคอลัมน์จริงของ Info Record template คอลัมน์ O / P (setup-outputs เขียนแบบย่อ)
