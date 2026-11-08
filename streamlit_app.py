@@ -5,7 +5,7 @@ and nothing is sent to a server. The logic is in costsaving/webui.py (tested by 
 only draws the widgets.
 
 Modes (D56):
-    Sourcing   template with data package (from SharePoint) → IC_Check, Summary → 4 files
+    Sourcing   template with data package (from SharePoint) → IC_Check, Summary → IC Processed + for Contract (D57)
     ทีมข้อมูล    master workbook + PO CSVs → template with data package, to publish on SharePoint
     PD         (next round) processed IC files + SAP reports → upload files for Source List, Info Record, FOC
 '''
@@ -50,7 +50,7 @@ def sourcing():
 
     st.subheader('1. อัปโหลด template ที่คีย์แล้ว')
     ic_up = st.file_uploader(
-        'template IC (.xlsx) — ดาวน์โหลดรุ่นล่าสุดจาก SharePoint คีย์ Header, Lines (และ CT_Leadtime ถ้าเป็น CT) แล้วอัปโหลดทั้งไฟล์',
+        'template IC (.xlsx) — ดาวน์โหลดรุ่นล่าสุดจาก SharePoint คีย์ Header และ Lines แล้วอัปโหลดทั้งไฟล์',
         type=['xlsx', 'xlsm'], disabled=use_sample)
     with st.expander('ขั้นสูง: ไฟล์ IC แบบเดิม หรือแทนข้อมูลในแพ็กเกจ'):
         st.caption('ใช้เมื่อเทียบกับไฟล์ IC เดิม (ไม่มีแพ็กเกจ) หรือทีมข้อมูลลองแพ็กเกจรุ่นใหม่ก่อนประกาศ '
@@ -62,6 +62,8 @@ def sourcing():
         with c2:
             po_up = st.file_uploader('CSV PO line (prc_spending_sap_{year}.csv) เลือกได้หลายไฟล์', type=['csv'],
                                      accept_multiple_files=True, disabled=use_sample)
+        key_date = st.date_input('Key Date ของไฟล์ IC เดิม (Price_Change_Template)', value=None, disabled=use_sample,
+                                 help='ไฟล์ IC เดิมไม่มี Key Date (วันที่หยุดค่า Baseline, D14) ใช้เฉพาะไฟล์เดิม template ใช้ค่าใน Header')
 
     if use_sample:
         st.info('กำลังใช้ข้อมูลตัวอย่าง (สมมติ) — ช่องอัปโหลดถูกปิดไว้')
@@ -71,7 +73,7 @@ def sourcing():
             None if ic_up is None else (ic_up.name, ic_up.size),
             None if master_up is None else (master_up.name, master_up.size),
             tuple((f.name, f.size) for f in po_up or []),
-            erp_system_id,
+            erp_system_id, key_date,
         )
 
     ready = use_sample or ic_up is not None
@@ -83,7 +85,8 @@ def sourcing():
                 ic_bytes = ic_up.getvalue()
                 master_bytes = master_up.getvalue() if master_up is not None else None
                 po_list = [f.getvalue() for f in po_up or []]
-            st.session_state['run'] = webui.run_uploads(ic_bytes, po_list, master_bytes, erp_system_id)
+            st.session_state['run'] = webui.run_uploads(ic_bytes, po_list, master_bytes, erp_system_id,
+                                                        None if use_sample else key_date)
             st.session_state['signature'] = signature
 
     run = st.session_state.get('run')

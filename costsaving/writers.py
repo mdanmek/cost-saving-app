@@ -2,7 +2,7 @@
 
     IC_Processed.xlsx  the one file submitted in SharePoint (D57): IC Request → IC Approve → IC Collected
                        Processed (checksum), Summary, IC_Check, what was keyed, table Input_forSavingCollect
-                       (read by the Project file), Out_PD (PD mode), Out_Contract, Summary_ByPlant / _Lines
+                       (read by the Project file), Out_PD + dimPlant_Raw (PD mode), Out_Contract, Summary_ByPlant / _Lines
     for_Contract.xlsx  one sheet per Vendor (Ariba)     → Sourcing imports into Ariba after approval
 '''
 import io
@@ -91,14 +91,14 @@ def write_processed(result, inputs, stamp, collect_table_name):
     add_table_sheet(wb, 'Summary', result['Summary'], 'Summary')
     add_table_sheet(wb, 'IC_Check', result['IC_Check'], 'IC_Check', TEXT_CODES)
     add_table_sheet(wb, 'Header', pd.DataFrame(list(inputs.header.items()), columns=['Field', 'Value']), 'Header')
-    add_table_sheet(wb, 'Lines', inputs.lines, 'Lines', TEXT_CODES + ('Order Unit', 'Final FOC', 'Nego FOC'))
-    if inputs.leadtime is not None and not inputs.leadtime.empty:
-        add_table_sheet(wb, 'CT_Leadtime', inputs.leadtime, 'CT_Leadtime', TEXT_CODES)
+    add_table_sheet(wb, 'Lines', inputs.lines, 'Lines', TEXT_CODES + ('Order Unit', 'Reference Order Unit', 'Final FOC', 'Nego FOC'))
     if inputs.plant_group is not None:
         add_table_sheet(wb, 'dimPlantGroup', inputs.plant_group, 'dimPlantGroup')
     add_table_sheet(wb, 'forSavingCollect', result['Out_Collect'], collect_table_name, TEXT_CODES)
     add_table_sheet(wb, 'Out_PD', result['Out_PD'], 'Out_PD', TEXT_CODES)
-    add_table_sheet(wb, 'Out_PD_Leadtime', result['Out_PD_Leadtime'], 'Out_PD_Leadtime', TEXT_CODES)
+    # plants of the commodity: the PD mode splits an All Plant line into these (S1, Q15)
+    if inputs.plant is not None:
+        add_table_sheet(wb, 'dimPlant_Raw', inputs.plant, 'dimPlant_Raw', TEXT_CODES)
     add_table_sheet(wb, 'Out_Contract', result['Out_Contract'], 'Out_Contract', TEXT_CODES)
     add_table_sheet(wb, 'Summary_ByPlant', result['Summary_ByPlant'], 'Summary_ByPlant', TEXT_CODES)
     add_table_sheet(wb, 'Summary_Lines', result['Summary_Lines'], 'Summary_Lines', TEXT_CODES)

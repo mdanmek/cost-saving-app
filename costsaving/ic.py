@@ -3,7 +3,7 @@
 Same rules as drafts/powerquery/ic_inputs.m and ic_outputs.m (decisions D11–D15, D39, D47–D53):
 
     Header ─┐
-    Lines ──┼─▶ agreement_lines ─▶ for PD (Out_PD, Out_PD_Leadtime)
+    Lines ──┼─▶ agreement_lines ─▶ for PD (Out_PD)
     masters ┘          ▲            for Contract (Out_Contract)
     PO lines ─▶ LPP ───┘            for Collect (Out_Collect)
              └▶ 12-month spend ───▶ for Summary (Summary, Summary_ByPlant, Summary_Lines)
@@ -19,21 +19,25 @@ import calendar
 import pandas as pd
 
 from .config import Config, clean, is_blank, to_bool, to_number, to_text, round_half_up
-from .prices import base_price, is_foc_valid
+from .prices import base_price, is_foc_valid, parse_foc
 
+# Lines of the template (Q13, 2026-11-08): same order as the typed columns of noCT_Input of the current IC file,
+# without what moved to Header (Commodity, Saving Strategy, Method, Effective / Valid Date, Project Name), without
+# First Price / First FOC (D12, Baseline = Min LPP) and without what the system fills (Material Description,
+# Vendor Name, MFG). New columns are appended and optional.
 LINE_COLUMNS = [
-    'Line No', 'Material Code', 'Material Description', 'Order Unit', 'UOM Description', 'a0',
-    'Final Price', 'Final FOC', 'Supplier Product Code', 'Supplier Product Name', 'Trade Name',
-    'TMT Code or UCEP Code', 'Country of Manufacture', 'Registration No.', 'Remark', 'Local or Import', 'Quotation Date',
-    'Vendor ID', 'Plant Group', 'PD Action', 'Nego Price', 'Nego FOC', 'Per for Setup',
-    'Transfer Price', 'LPP SaveDrug', 'LPP DrPharma', 'Reference Material Code', 'LPP Hospital Manual',
-    'Growth %', 'Fix Vendor Requested', 'UCEP / Note for Info',
+    'Line No', 'PD Action', 'Plant Group', 'Material Code', 'Vendor ID', 'Order Unit',
+    'Reference Material Code', 'Reference Order Unit', 'Per for Setup', 'Nego Price', 'Nego FOC',
+    'Final Price', 'Final FOC', 'Local or Import', 'Supplier Product Code', 'Supplier Product Name', 'Trade Name',
+    'TMT Code or UCEP Code', 'Quotation Date', 'Remark',
+    'Transfer Price', 'LPP SaveDrug', 'LPP DrPharma', 'LPP Hospital Manual', 'Growth %',
+    'Fix Vendor Requested', 'UCEP / Note for Info', 'Registration No.', 'Country of Manufacture',
     'Registration Type', 'Special Feature', 'Standard Qty', 'Minimum Qty',
 ]
 TEXT_FIELDS = [
     'Material Code', 'Order Unit', 'Final FOC', 'Supplier Product Code', 'Supplier Product Name', 'Trade Name',
     'TMT Code or UCEP Code', 'Country of Manufacture', 'Registration No.', 'Remark', 'Local or Import',
-    'Vendor ID', 'Plant Group', 'PD Action', 'Nego FOC', 'Reference Material Code', 'Fix Vendor Requested',
+    'Vendor ID', 'Plant Group', 'PD Action', 'Nego FOC', 'Reference Material Code', 'Reference Order Unit', 'Fix Vendor Requested',
     'UCEP / Note for Info', 'Registration Type', 'Special Feature',
 ]
 NUMBER_FIELDS = [
@@ -53,10 +57,6 @@ OUT_PD_COLUMNS = [
     'Material Group', 'Material Type', 'Effective Date', 'Valid Date', 'Project Name', 'Expected', 'Remark',
     'Template Version', 'Info Record Price', 'Info Record FOC', 'Country of Manufacture',
     'PD Action', 'PD Action Description', 'Combination ID', 'Package Version',
-]
-OUT_PD_LEADTIME_COLUMNS = [
-    'Commodity', 'Vendor ID', 'Hospital Area', 'Product Type', 'Minimum Order (Baht)', 'Leadtime (Days)', 'Remark',
-    'Effective Date', 'Valid Date',
 ]
 # Collect: the first 29 columns keep the names and order of Input_forSavingCollect (v.20261102); v2 appended (P5)
 OUT_COLLECT_COLUMNS = [
@@ -99,10 +99,10 @@ class ICInputs:
     plant: pd.DataFrame
     plant_group: pd.DataFrame
     po_lines: pd.DataFrame
-    leadtime: pd.DataFrame = None
     package: dict = None   # Package_Info of the template (D56); None for files without a package
     material_commodity: dict = None  # dimMaterial of the package: Material → Commodity (all commodities)
     official_plant_group: pd.DataFrame = None  # data team's groups in the package (D57: names locked)
+    messages: list = None  # [(level, upload, text)] found while reading the input (e.g. the current IC file)
 
 
 # ---------------------------------------------------------------- small helpers
@@ -152,6 +152,12 @@ def prepare_masters(inputs):
             'Base Unit': to_text(r.get('Base Unit')),
             'UOM ISO Code': to_text(r.get('ISO Code')),
         })
+    # Base Units a material is bought in (Order Units in MasterInfo → dimUOM_Raw): used by W04
+    material_base_units = {}
+    for (mat, _vendor, order_unit) in masterinfo:
+        base = uom.get(order_unit, {}).get('Base Unit')
+        if base:
+            material_base_units.setdefault(mat, set()).add(base)
     plant_by_name = {}
     for r in records(inputs.plant):
         plant_by_name.setdefault(to_text(r['Plant Name']), {
@@ -170,7 +176,7 @@ def prepare_masters(inputs):
         groups.setdefault(to_text(r['Plant Group']), plants)
     return {
         'masterinfo': masterinfo, 'material_name': material_name, 'vendor_name': vendor_name,
-        'uom': uom, 'plant_by_code': plant_by_code, 'groups': groups,
+        'uom': uom, 'plant_by_code': plant_by_code, 'groups': groups, 'material_base_units': material_base_units,
     }
 
 
@@ -288,6 +294,9 @@ def build_agreement_lines(inputs, cfg: Config):
         row['is Collect Cost Saving'] = c.get('is Collect Cost Saving')
         row['PD Action Description'] = p.get('PD Action Description')
         row['PD Needs Contract'] = p.get('Needs Contract')
+        row['PD Needs Price'] = p.get('Needs Price') is not False
+        if not row['PD Needs Price']:
+            row['is Collect Cost Saving'] = False
         if row['Fix Vendor Requested'] is None and p.get('Fix Vendor') is True:
             row['Fix Vendor Requested'] = '✓'
         # masters
@@ -313,6 +322,10 @@ def build_agreement_lines(inputs, cfg: Config):
         row['LPP DrPharma Base Unit'] = base_price(x['LPP DrPharma'], None, conv, decimals)
         row['LPP Hospital Manual Base Unit'] = base_price(x['LPP Hospital Manual'], None, conv, decimals)
         row['LPP Lookup Material'] = x['Reference Material Code'] or x['Material Code']
+        # spend of a moved code is matched on the old Order Unit when it is given (Q14: Alternative Order Unit)
+        row['Spend Order Unit'] = x['Reference Order Unit'] or x['Order Unit']
+        ref_bases = m['material_base_units'].get(x['Reference Material Code']) if x['Reference Material Code'] else None
+        row['Reference Base Unit Mismatch'] = bool(ref_bases) and row['Base Unit'] is not None and row['Base Unit'] not in ref_bases
         # Setup Material No. = FOC_code (code column from dimCommodity), as funcPD of the current file
         code = row.get(commodity.get('Setup Code Field')) if commodity.get('Setup Code Field') else None
         foc = x['Final FOC']
@@ -384,47 +397,51 @@ def changed_official_groups(inputs):
     return sorted(n for n, sets in keyed.items() if n in official and any(s != official[n] for s in sets))
 
 
-def is_ct(header, cfg: Config):
-    '''CT_Leadtime is used only for a CT Method, as in the current file (D56): dim_method.is CT.'''
-    flags = {r['Method']: r['is CT'] for r in records(cfg.dim_method)}
-    return flags.get(to_text(header.get('Method'))) is True
+def collect_tiers(foc):
+    '''FOC text → the tiers the current IC file writes in Collect: none → [None]; '10F1,20F3' →
+    ['1F0', '10F1', '20F3'] (Input_forSavingCollect prefixes '1F0,' and splits, so the price without
+    free goods is one more row). Each tier = (text, buy, free). An invalid FOC (E04) gives [None].'''
+    if is_blank(foc) or not is_foc_valid(foc):
+        return [(None, 1, 0)]
+    tiers = [(f"{int(t['buy'])}F{int(t['free'])}", t['buy'], t['free']) for t in parse_foc(foc)]
+    return [('1F0', 1, 0)] + tiers
 
 
-def leadtime_rows(inputs):
-    return [r for r in records(inputs.leadtime)
-            if to_text(r.get('Hospital Area')) and (to_number(r.get('Leadtime (Days)')) is not None
-                                                     or to_number(r.get('Minimum Order (Baht)')) is not None)]
-
-
-def out_pd_leadtime(inputs, cfg: Config):
-    h = inputs.header
-    rows = []
-    if not is_ct(h, cfg):
-        return pd.DataFrame(rows, columns=OUT_PD_LEADTIME_COLUMNS)
-    for r in records(inputs.leadtime):
-        area = to_text(r.get('Hospital Area'))
-        days, minimum = to_number(r.get('Leadtime (Days)')), to_number(r.get('Minimum Order (Baht)'))
-        if area is None or (days is None and minimum is None):
-            continue
-        rows.append({
-            'Commodity': to_text(h.get('Commodity')), 'Vendor ID': to_text(r.get('Vendor ID')) or to_text(h.get('Vendor ID')),
-            'Hospital Area': area, 'Product Type': to_text(r.get('Product Type')),
-            'Minimum Order (Baht)': minimum, 'Leadtime (Days)': days, 'Remark': clean(r.get('Remark')),
-            'Effective Date': to_date(h.get('Effective Date')), 'Valid Date': to_date(h.get('Valid Date')),
-        })
-    return pd.DataFrame(rows, columns=OUT_PD_LEADTIME_COLUMNS)
-
-
-def out_collect(lines):
+def out_collect(lines, decimals=2):
+    '''Input_forSavingCollect in the shape the current IC file writes it (Q4, 2026-11-08), so the Project
+    and Cost Saving files read it as today:
+      - one row per Final FOC tier plus the row without free goods ('1F0'); the dispatch file compares
+        the PO Order Quantity with the 'buy' part of Final FOC (Check Quantity)
+      - Nego FOC of each row = the deepest Nego tier whose buy is not above the Final tier (Compared FOC)
+      - Project Name = '[Saving Strategy]Method_Project Name'
+    Prices of each row are recomputed for its tier at Base Unit (D53 rounding). First Price / First FOC are
+    empty (D12) and First Price Base Unit carries the Baseline (P12), so PPV = Baseline − Final of the tier.'''
     rows = []
     for r in lines:
         if r.get('is Collect Cost Saving') is not True or not r.get('Final Price Base Unit'):
             continue
-        c = dict(r)
-        # First Price / First FOC no longer exist (D12); First Price Base Unit carries the Baseline (P12)
-        c.update({'First Price': None, 'First FOC': None, 'First Price Base Unit': r['Baseline Price Base Unit'],
-                  'PD': r.get('PD Action'), 'IC Template Version': r.get('Template Version')})
-        rows.append({col: c.get(col) for col in OUT_COLLECT_COLUMNS})
+        conv = r.get('Conversion')
+        nego_price = r['Nego Price'] if r.get('Nego Price') is not None else r['Final Price']
+        nego_foc = r['Nego FOC'] if r.get('Nego Price') is not None else r['Final FOC']
+        nego_tiers = collect_tiers(nego_foc)
+        baseline = r.get('Baseline Price Base Unit')
+        for f_text, f_buy, f_free in collect_tiers(r['Final FOC']):
+            n_text, n_buy, n_free = max((t for t in nego_tiers if t[1] <= f_buy), key=lambda t: (t[1], t[2]))
+            final_b = round_half_up(r['Final Price'] * f_buy / (f_buy + f_free) / conv, decimals)
+            nego_b = None if nego_price is None else round_half_up(nego_price * n_buy / (n_buy + n_free) / conv, decimals)
+            ppv = None if baseline is None else round_half_up(baseline - final_b, decimals)
+            c = dict(r)
+            c.update({
+                'Project Name': f"[{r.get('Saving Strategy') or ''}]{r.get('Method') or ''}_{r.get('Project Name') or ''}",
+                'First Price': None, 'First FOC': None, 'First Price Base Unit': baseline,
+                'Final FOC': f_text, 'Nego FOC': n_text,
+                'Final Price Base Unit': final_b, 'Nego Price Base Unit': nego_b,
+                'Avoid Base Unit': None if nego_b is None else round_half_up(nego_b - final_b, decimals),
+                'PPV Base Unit': ppv,
+                'Expected': None if ppv is None else ('Gain' if ppv > 0 else 'Loss' if ppv < 0 else 'Constant'),
+                'PD': r.get('PD Action'), 'IC Template Version': r.get('Template Version'),
+            })
+            rows.append({col: c.get(col) for col in OUT_COLLECT_COLUMNS})
     return pd.DataFrame(rows, columns=OUT_COLLECT_COLUMNS)
 
 
@@ -468,7 +485,7 @@ def contract_base(lines, cfg: Config):
         x['issue'] = join_messages([
             'ไม่มี Vendor ID (หนึ่ง Contract ต่อหนึ่ง Vendor)' if not r.get('Vendor ID') else None,
             'ไม่มี Material Description (Item Name บังคับ)' if not r.get('Material Description') else None,
-            'E03 Final Price ว่างหรือ ≤ 0' if not r.get('Final Price') or r['Final Price'] <= 0 else None,
+            'E03 Final Price ว่างหรือ ≤ 0' if not r.get('Final Price') or r['Final Price'] <= 0 else None,  # Needs Price rows only
             'แถวซ้ำใน Contract เดียวกัน (Vendor × Material × Order Unit × Plant)' if keys[k] > 1 else None,
             'Item Text บังคับ: กรอก Trade Name (C9)' if o['Item Text'] is None else None,
             'ไม่พบ Commodity ของ Ariba ใน dim_commodity (C4)' if o['Commodity'] is None else None,
@@ -509,7 +526,7 @@ def summary_lines(lines, window, inputs, cfg: Config):
                    if s['Material Code'] == r['LPP Lookup Material'] and s['Base Unit'] == r['Base Unit']
                    and (r['Plant'] is None or s['Plant'] == r['Plant'])
                    and (ct.get('Match Vendor') is not True or s['Vendor ID'] == r['Vendor ID'])
-                   and (ct.get('Match Order Unit') is not True or s['Order Unit'] == r['Order Unit'])]
+                   and (ct.get('Match Order Unit') is not True or s['Order Unit'] == r['Spend Order Unit'])]
         for s in matches or [None]:
             qty = None if s is None else s['qty'] * split * duration
             amt = None if s is None else s['amt'] * split * duration
@@ -645,12 +662,8 @@ def build_check(lines, contract_rows, header, cfg: Config, inputs=None):
         for name in changed_official_groups(inputs):
             add('Error', 'dimPlantGroup', f'P04 กลุ่ม {name} ถูกแก้ Plant List ต่างจากกลุ่มของทีมข้อมูล '
                 'ถ้าต้องการชุด Plant อื่นให้เพิ่มกลุ่มใหม่ชื่ออื่น แล้วคืนค่ากลุ่มนี้ตาม template')
-    if inputs is not None:
-        ct, lt = is_ct(header, cfg), leadtime_rows(inputs)
-        if ct and not lt:
-            add('Warning', 'CT_Leadtime', 'W09 Method นี้เป็น CT แต่ยังไม่กรอก CT_Leadtime (PD จะใช้ค่าเริ่มต้น)')
-        if not ct and lt:
-            add('Warning', 'CT_Leadtime', 'W10 กรอก CT_Leadtime แต่ Method นี้ไม่ใช่ CT จึงไม่ส่งต่อให้ PD (ใช้เฉพาะ CT)')
+    for level, upload, text in (inputs.messages if inputs is not None else None) or []:
+        add(level, upload, text)
 
     uses_transfer = {r['Method']: r['Uses Transfer Price'] for r in records(cfg.dim_method)}
     ppv_warning = cfg.const_number('IC', 'PPV Warning %')
@@ -671,7 +684,8 @@ def build_check(lines, contract_rows, header, cfg: Config, inputs=None):
              (f"E02 ไม่พบ Order Unit {r['Order Unit']} ใน dimUOM_Raw" if r['Conversion'] is None else None)),
             ('E11 ไม่มี Vendor ID (กรอกที่ Header หรือ Lines)' if r['Vendor ID'] is None else
              (f"E11 ไม่พบ Vendor ID {r['Vendor ID']} ใน MasterInfo" if r['Vendor Name'] is None else None)),
-            'E03 Final Price ว่างหรือ ≤ 0' if not r['Final Price'] or r['Final Price'] <= 0 else None,
+            ('E03 Final Price ว่างหรือ ≤ 0' if r.get('PD Needs Price', True) and (not r['Final Price'] or r['Final Price'] <= 0)
+             else None),
             'E04 FOC ผิดรูปแบบ (ซื้อFแถม เช่น 10F1 หรือ 10F1,20F3)' if not (is_foc_valid(r['Final FOC']) and is_foc_valid(r['Nego FOC'])) else None,
             'E05 รายการซ้ำ (Material + Vendor + Order Unit + Plant)' if keys[k] > 1 else None,
             'E06 Method นี้ต้องกรอก Transfer Price' if transfer and r['Transfer Price'] is None else None,
@@ -683,6 +697,8 @@ def build_check(lines, contract_rows, header, cfg: Config, inputs=None):
             ('W01 หา Baseline ไม่ได้ ถ้าเป็นสินค้าใหม่ปล่อยได้ ถ้าไม่ใช่ให้กรอก LPP Hospital Manual หรือ Reference Material Code'
              if r['Baseline Source'] == 'No Baseline' else None),
             'W02 Final Price Base Unit สูงกว่า Baseline (จะเป็น Loss)' if r['Expected'] == 'Loss' else None,
+            ('W04 Base Unit ของ Reference Material Code ไม่ตรงกับรายการใหม่ (LPP และ spending ของรหัสเดิมจะหาไม่เจอ)'
+             if r.get('Reference Base Unit Mismatch') else None),
             'W03 Final Price สูงกว่า Nego Price' if r['Nego Price'] is not None and r['Final Price'] is not None and r['Final Price'] > r['Nego Price'] else None,
             f'W05 PPV {pct:.0%} ของ Baseline (มักเป็นการคีย์หน่วยผิด)' if pct is not None and abs(pct) > ppv_warning else None,
             ('W06 Transfer Price ต่ำกว่า Final Price (SDC ขายต่ำกว่าทุน)'
@@ -720,9 +736,8 @@ def run_ic(inputs: ICInputs, cfg: Config):
     return {
         'agreement_line': pd.DataFrame(lines),
         'Out_PD': out_pd(lines),
-        'Out_PD_Leadtime': out_pd_leadtime(inputs, cfg),
         'Out_Contract': out_contract(contract_rows),
-        'Out_Collect': out_collect(lines),
+        'Out_Collect': out_collect(lines, int(cfg.const_number('IC', 'Base Price Decimals'))),
         'Summary_Lines': sl,
         'Summary_ByPlant': summary_by_plant(sl),
         'Summary': summary(sl, lines, check, inputs.header, inputs.package),

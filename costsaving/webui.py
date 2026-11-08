@@ -45,7 +45,7 @@ def make_config(erp_system_id=None):
     return load_config(overrides=overrides or None)
 
 
-def run_uploads(ic_bytes, po_bytes_list=(), master_bytes=None, erp_system_id=None):
+def run_uploads(ic_bytes, po_bytes_list=(), master_bytes=None, erp_system_id=None, key_date=None):
     '''One run from the uploaded files. Reading problems (missing table, wrong file type) come back
     as RunResult.problem instead of an exception, so the page can show them in Thai.'''
     if not ic_bytes:
@@ -56,7 +56,7 @@ def run_uploads(ic_bytes, po_bytes_list=(), master_bytes=None, erp_system_id=Non
             ic_bytes,
             po_files=[io.BytesIO(b) for b in po_bytes_list if b],
             master_file=io.BytesIO(master_bytes) if master_bytes else None,
-            cfg=cfg,
+            cfg=cfg, key_date=key_date,
         )
     except KeyError as e:
         return RunResult(problem=str(e).strip("'\""))

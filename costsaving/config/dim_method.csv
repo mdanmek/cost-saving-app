@@ -1,9 +1,9 @@
-Method,Calc Type,Uses Transfer Price,Source List Mode,is CT
-Bidding,All Vendor,FALSE,Replace,FALSE
-Special Deal,By Vendor Period,FALSE,Keep,FALSE
-Patient Access,By Vendor,FALSE,Keep,FALSE
-PPV,By Vendor,FALSE,Keep,FALSE
-Renegotiation,By Vendor,FALSE,Keep,FALSE
-Yearly Contract,By Vendor,FALSE,Keep,TRUE
-Pool Purchase,All Vendor,TRUE,Replace,FALSE
-Parallel Purchase,By Vendor,FALSE,Keep,FALSE
+Method,Calc Type,Uses Transfer Price,Source List Mode
+Bidding,All Vendor,FALSE,Replace
+Special Deal,By Vendor Period,FALSE,Keep
+Patient Access,By Vendor,FALSE,Keep
+PPV,By Vendor,FALSE,Keep
+Renegotiation,By Vendor,FALSE,Keep
+Yearly Contract,By Vendor,FALSE,Keep
+Pool Purchase,All Vendor,TRUE,Replace
+Parallel Purchase,By Vendor,FALSE,Keep

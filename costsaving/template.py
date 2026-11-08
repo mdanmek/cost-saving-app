@@ -1,14 +1,13 @@
 '''Template IC with its data package — one Excel file, as today (D56).
 
 The data team builds the template for one commodity and puts it on SharePoint. Sourcing downloads
-it, keys Header / Lines (+ CT_Leadtime for CT, + their own Plant Groups), and the app processes it.
+it, keys Header / Lines (+ their own Plant Groups), and the app processes it.
 
     sheet               who fills it        what it is
     ─────────────────   ─────────────────   ─────────────────────────────────────────────────────
     README              data team (app)     how to use, package version
     Header              Sourcing            one agreement (Field | Value, dropdowns)
-    Lines               Sourcing            one row per item (same 17 first columns as CT_Vendor)
-    CT_Leadtime         Sourcing (CT only)  leadtime / minimum order per Hospital Area (D56)
+    Lines               Sourcing            one row per item (typed columns of noCT_Input, Q13)
     dimPlantGroup       Sourcing may add    Plant Group → Plant List (codes or names, comma separated)
     ─── package (controlled by the data team until the next package round) ───────────────────
     Package_Info        data team           version, commodity, spending window
@@ -45,8 +44,6 @@ HEADER_FIELDS = [
     'Commodity', 'Saving Strategy', 'Method', 'Vendor ID', 'Project Name', 'Effective Date', 'Valid Date',
     'Key Date', 'Quotation Date', 'Plant Group', 'Growth %', 'Remark',
 ]
-LEADTIME_COLUMNS = ['No.', 'Vendor ID', 'Hospital Area', 'Product Type', 'a0', 'Minimum Order (Baht)',
-                    'Leadtime (Days)', 'Remark']
 PLANT_GROUP_COLUMNS = ['Plant Group', 'Plant List', 'Count']
 MASTERINFO_COLUMNS = ['Material Code', 'Material Description', 'Vendor ID', 'Vendor Name', 'MFG', 'Order Unit',
                       'FOC', 'Order Unit Price']
@@ -162,10 +159,10 @@ def _list_validation(sheet_range, cells):
 
 
 def build_template(cfg: Config, masterinfo, uom, plant, plant_group, po, commodity,
-                   spend_from=None, spend_to=None, header=None, lines=None, leadtime=None, created=None):
+                   spend_from=None, spend_to=None, header=None, lines=None, created=None):
     '''Returns (xlsx bytes, Package_Info dict). masterinfo / uom / plant / plant_group = DataFrames
     as read from the master workbook; po = normalized PO lines (all commodities is fine).
-    header / lines / leadtime prefill the input sheets (used for the sample file).'''
+    header / lines prefill the input sheets (used for the sample file).'''
     if spend_from is None or spend_to is None:
         f, t = default_window(po, cfg)
         spend_from, spend_to = spend_from or f, spend_to or t
@@ -201,7 +198,6 @@ def build_template(cfg: Config, masterinfo, uom, plant, plant_group, po, commodi
     for text in [
         'Template IC — คีย์ Header และ Lines แล้วอัปโหลดไฟล์นี้ทั้งไฟล์ที่ https://mdanmek.github.io/cost-saving-app/',
         'ห้ามแก้ชื่อชีต ชื่อคอลัมน์ หรือลบแถวหัวตาราง ทุกตารางต้องเริ่มที่เซลล์ A1',
-        'CT_Leadtime: กรอกเฉพาะ Method ที่เป็น CT (ไฟล์อื่นเว้นว่าง)',
         'dimPlantGroup: เพิ่มกลุ่มใหม่ได้ (Plant List = รหัสหรือชื่อ Plant คั่นด้วย ,) แต่ห้ามแก้กลุ่มที่ทีมข้อมูลตั้งไว้ ถ้าต้องการชุด Plant อื่นให้ตั้งชื่อกลุ่มใหม่',
         'Package_Info, dimMasterInfo_Raw, dimUOM_Raw, dimPlant_Raw, fact_po_lines, dimMaterial, dimPlantGroup_Official เป็นข้อมูลที่ทีมข้อมูลควบคุม ห้ามแก้',
         f"Package {info['Package Version']} · spending {spend_from:%Y-%m-%d} ถึง {spend_to:%Y-%m-%d} · {info['Spending Rows']:,} PO lines",
@@ -219,8 +215,6 @@ def build_template(cfg: Config, masterinfo, uom, plant, plant_group, po, commodi
     pd_col = get_column_letter(LINE_COLUMNS.index('PD Action') + 1)
     _table_sheet(wb, 'Lines', LINE_COLUMNS, line_rows, fill=INPUT_FILL,
                  validations=[_list_validation(list_ref('PD Action'), f'{pd_col}2:{pd_col}{INPUT_ROWS_WITH_DROPDOWN}')])
-    lt_rows = [] if leadtime is None else [list(r) for r in leadtime]
-    _table_sheet(wb, 'CT_Leadtime', LEADTIME_COLUMNS, lt_rows, fill=INPUT_FILL)
     _table_sheet(wb, 'dimPlantGroup', PLANT_GROUP_COLUMNS,
                  [[r.get(c) for c in PLANT_GROUP_COLUMNS] for r in plant_group.to_dict('records')], fill=INPUT_FILL,
                  widths={'Plant List': 80})
@@ -330,7 +324,6 @@ def read_template(source):
             'package': info,
             'header': header,
             'lines': lines,
-            'leadtime': read_sheet(wb, 'CT_Leadtime', required=False),
             'plant_group': read_sheet(wb, 'dimPlantGroup'),
             'official_plant_group': read_sheet(wb, 'dimPlantGroup_Official', required=False),
             'masterinfo': normalize_masterinfo(read_sheet(wb, 'dimMasterInfo_Raw')),
