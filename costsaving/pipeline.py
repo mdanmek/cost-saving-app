@@ -16,6 +16,7 @@ import json
 from .config import clean, load_config, to_text
 from .ic import ICInputs, run_ic
 from .readers import normalize_po_lines, open_workbook, read_header, read_masterinfo, read_po_lines, read_table
+from .legacy import is_legacy, read_legacy
 from .template import has_package, read_template
 from . import writers
 
@@ -42,13 +43,20 @@ def _find_masterinfo(workbooks):
     raise KeyError('ไม่พบตาราง dimMasterInfo_Raw หรือ MasterInfo_ActiveTH')
 
 
-def load_ic_inputs(ic_file, po_files=(), master_file=None, po_table=None):
+def load_ic_inputs(ic_file, po_files=(), master_file=None, po_table=None, key_date=None):
     '''ic_file / master_file = path, file object or bytes. po_files = list of CSV sources.
-    po_table = name of a PO-line table inside the IC workbook (used by the test workbook).'''
+    po_table = name of a PO-line table inside the IC workbook (used by the test workbook).
+    ic_file may be the current IC file (Price_Change_Template, noCT_Input / CT_Input): it is read as
+    Sourcing keys it today (legacy.py), and key_date is needed because that file has none.'''
     ic_wb = open_workbook(ic_file)
     workbooks = [ic_wb] + ([open_workbook(master_file)] if master_file is not None else [])
-    header = read_header(ic_wb)
-    lines = read_table(ic_wb, 'Lines')
+    messages, leadtime = [], None
+    if is_legacy(ic_wb):
+        header, lines, leadtime, messages = read_legacy(ic_wb, key_date)
+    else:
+        header = read_header(ic_wb)
+        lines = read_table(ic_wb, 'Lines')
+        leadtime = read_table(ic_wb, 'CT_Leadtime', required=False)
     materials = set(lines['Material Code'].map(to_text).dropna())
     if 'Reference Material Code' in lines:
         materials |= set(lines['Reference Material Code'].map(to_text).dropna())
@@ -64,7 +72,8 @@ def load_ic_inputs(ic_file, po_files=(), master_file=None, po_table=None):
         plant=_find_table(workbooks, 'dimPlant_Raw'),
         plant_group=_find_table(workbooks, 'dimPlantGroup'),
         po_lines=po,
-        leadtime=read_table(ic_wb, 'CT_Leadtime', required=False),
+        leadtime=leadtime,
+        messages=messages,
     )
 
 
@@ -101,15 +110,42 @@ def load_template_inputs(ic_bytes, po_files=(), master_file=None):
     return inputs
 
 
+def canonical_text(value):
+    '''One text per value, whatever type it comes back as from Excel: date and datetime at midnight → 2026-12-01,
+    100.0 → 100, codes and text stripped. Written then read back, the processed file must give the same checksum.'''
+    from datetime import date, datetime
+    import math
+    value = clean(value)
+    if value is None:
+        return None
+    if hasattr(value, 'to_pydatetime'):
+        value = value.to_pydatetime()
+    if isinstance(value, datetime):
+        return value.date().isoformat() if value.time() == datetime.min.time() else value.isoformat(sep=' ')
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, (int, float)) or hasattr(value, 'item'):
+        number = float(value)
+        if math.isnan(number):
+            return None
+        return str(int(number)) if number.is_integer() else repr(number)
+    return str(value).strip()
+
+
 def input_checksum(inputs):
     '''SHA-256 of what Sourcing keyed (Header, Lines, CT_Leadtime, dimPlantGroup) + package version.
-    Written in the processed file, so the PD mode can tell whether the file was edited after approval.'''
+    Written in the processed file, so the PD mode can tell whether the file was edited after approval.
+    Values go through canonical_text, and empty trailing rows / columns do not count.'''
     def table(df):
         if df is None:
             return []
-        return [[None if clean(v) is None else str(clean(v)) for v in row] for row in df.itertuples(index=False)]
+        rows = [[canonical_text(v) for v in row] for row in df.itertuples(index=False)]
+        return [[str(c)] + [r[i] for r in rows] for i, c in enumerate(df.columns)
+                if any(r[i] is not None for r in rows)]
     payload = {
-        'header': {k: None if clean(v) is None else str(clean(v)) for k, v in sorted(inputs.header.items())},
+        'header': {str(k): canonical_text(v) for k, v in sorted(inputs.header.items(), key=lambda kv: str(kv[0]))},
         'lines': table(inputs.lines), 'leadtime': table(inputs.leadtime), 'plant_group': table(inputs.plant_group),
         'package': to_text((inputs.package or {}).get('Package Version')),
     }
@@ -138,18 +174,19 @@ def output_files(result, cfg, inputs, processed_at=None):
     }
 
 
-def process_ic(ic_file, po_files=(), master_file=None, po_table=None, cfg=None, processed_at=None):
+def process_ic(ic_file, po_files=(), master_file=None, po_table=None, cfg=None, processed_at=None, key_date=None):
     '''Returns (result tables, output files). The caller decides whether to block on errors:
     result['IC_Check'] with Level = Error must be empty before the file is submitted.
 
     ic_file = template with data package (D56), or an IC workbook without package plus a master
-    workbook / PO CSVs (the earlier format, kept for comparing with the current IC file).'''
+    workbook / PO CSVs (the earlier format, kept for comparing with the current IC file, D57 Q7).
+    key_date = Key Date for the current IC file, which has none (ignored for the template).'''
     cfg = cfg or load_config()
     data = _bytes(ic_file)
     if po_table is None and has_package(data):
         inputs = load_template_inputs(data, po_files, master_file)
     else:
-        inputs = load_ic_inputs(io.BytesIO(data), po_files, master_file, po_table)
+        inputs = load_ic_inputs(io.BytesIO(data), po_files, master_file, po_table, key_date)
     result = run_ic(inputs, cfg)
     result['inputs'] = inputs
     return result, output_files(result, cfg, inputs, processed_at)

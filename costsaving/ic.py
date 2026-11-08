@@ -103,6 +103,7 @@ class ICInputs:
     package: dict = None   # Package_Info of the template (D56); None for files without a package
     material_commodity: dict = None  # dimMaterial of the package: Material → Commodity (all commodities)
     official_plant_group: pd.DataFrame = None  # data team's groups in the package (D57: names locked)
+    messages: list = None  # [(level, upload, text)] found while reading the input (e.g. the current IC file)
 
 
 # ---------------------------------------------------------------- small helpers
@@ -651,6 +652,9 @@ def build_check(lines, contract_rows, header, cfg: Config, inputs=None):
             add('Warning', 'CT_Leadtime', 'W09 Method นี้เป็น CT แต่ยังไม่กรอก CT_Leadtime (PD จะใช้ค่าเริ่มต้น)')
         if not ct and lt:
             add('Warning', 'CT_Leadtime', 'W10 กรอก CT_Leadtime แต่ Method นี้ไม่ใช่ CT จึงไม่ส่งต่อให้ PD (ใช้เฉพาะ CT)')
+
+    for level, upload, text in (inputs.messages if inputs is not None else None) or []:
+        add(level, upload, text)
 
     uses_transfer = {r['Method']: r['Uses Transfer Price'] for r in records(cfg.dim_method)}
     ppv_warning = cfg.const_number('IC', 'PPV Warning %')

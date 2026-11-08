@@ -32,10 +32,24 @@
 | D57 Q3 | Package Version แสดงใน Summary · ประมวลผลซ้ำใช้แพ็กเกจล่าสุด | `ic.summary`, `pipeline.processed_stamp` | ทำแล้ว |
 | D57 Q5 | เตือนเมื่อ spending ในแพ็กเกจเก่ากว่า Key Date เกิน 45 วัน | `build_check` P01 (`constants.csv` Package / Max Age Days) | ทำแล้ว |
 | D57 Q6 | ประมวลผลไม่เกิน 2 นาที | `webui.benchmark` | ทำแล้ว (วัดบน Pyodide 17.3 วินาที / 160,009 แถว สมมติ) |
-| D57 Q7 | ทางเดิม (ไฟล์ IC + master + CSV) เก็บไว้ช่วงเปลี่ยนผ่าน | `pipeline.load_ic_inputs`, ส่วน "ขั้นสูง" ของหน้าเว็บ | ทำแล้ว |
-| P16 (D57) | Input Checksum (SHA-256) ของสิ่งที่คีย์ ใน IC Processed | `pipeline.input_checksum` | ทำแล้ว · **ยังไม่มี test ว่าอ่านกลับจากไฟล์ IC Processed แล้วได้ค่าเดิม** (ลองมือกับข้อมูลตัวอย่างแล้วตรง แต่โหมด PD ต้องพึ่ง จึงต้องมี test) |
+| D57 Q7 | ทางเดิม (ไฟล์ IC + master + CSV) เก็บไว้ช่วงเปลี่ยนผ่าน | `pipeline.load_ic_inputs`, `legacy.read_legacy`, ส่วน "ขั้นสูง" ของหน้าเว็บ | ขัดกัน → แก้แล้ว: เดิมอ่านไฟล์ IC จริงไม่ได้ (ดู 1.1) |
+| P16 (D57) | Input Checksum (SHA-256) ของสิ่งที่คีย์ ใน IC Processed | `pipeline.input_checksum`, `pipeline.canonical_text` | บางส่วน → แก้แล้ว: อ่านกลับจากไฟล์ IC เดิมได้ค่าไม่ตรง (`test_processed_file_checksum_round_trips`) |
 | template-spec ข้อ 7 | กฎ E01–E13, H01–H07, W01–W08 | `ic.build_check` | บางส่วน: **W04 (Base Unit ของ Reference Material Code ไม่ตรงกับรายการใหม่) ยังไม่ทำ** · E09 (consignment มี FOC) อยู่ฝั่ง PD เพราะไฟล์ IC ไม่รู้ consignment (D48) |
 | template-spec ข้อ 8 | Summary มี 10 รายการ Saving สูงสุด / ต่ำสุด | — | ยังไม่ทำ (P13 เปลี่ยน Summary เป็นราย Plant แบบเดิม จึงไม่ถือเป็นช่องว่าง เว้นแต่ 瑞安 ต้องการ) |
+
+### 1.1 สิ่งที่ Sourcing คีย์จริงในไฟล์ IC เดิม (ตรวจโครงไฟล์ Price_Change_Template v.20261102 ที่ 瑞安 แนบ 2026-11-08 · บันทึกเฉพาะชื่อชีต ตาราง และคอลัมน์)
+
+`varCT` (ชีต Summary) เลือกทาง ทั้งสองทางลงเอยที่ตารางหัวคอลัมน์ 48 คอลัมน์ชุดเดียวกัน (`Input_noCT` / `Input_CT`) แล้ว query `Input` ประมวลผลเหมือนกัน
+
+| ทาง | Sourcing กรอก | ไม่ได้กรอก (สูตรหรือ query) |
+|---|---|---|
+| noCT | เซลล์เหนือตาราง: Commodity, Saving Strategy · ตาราง `Input_noCT` 28 คอลัมน์: Method, PD, Plant Group, Material Code, Material Description, Vendor ID, Vendor Name, MFG, Order Unit, Alternative Material Code, Alternative Order Unit, Per for Setup, First Price, First FOC, Nego Price, Nego FOC, Final Price, Final FOC, Effective Date, Valid Date, Project Name, Local or Import, Supplier Product Code, Supplier Product Name, Trade Name, TMT Code or UCEP Code, Quotation Date, Remark | Commodity, Saving Strategy (อ้างเซลล์), Order Unit Text, ISO Code, Conversion, Base Unit, ราคา Base Unit สามตัว, Avoid, PPV, %PPV, Expected, Combination ID, Plant List |
+| CT | ชีต `CT_Vendor`: Vendor (`varVendor` = `รหัส_ชื่อ`), Quotation Date เหนือตาราง, ตาราง `CT` (ฟอร์มใบเสนอราคา 16 คอลัมน์ รวมประเทศผู้ผลิตและเลขทะเบียน อย.) · ชีต `CT_Leadtime` · รีเฟรช `CT_Input` แล้วกรอก Commodity, Saving Strategy (เหนือตาราง) และ Method, PD, Plant Group รายแถว | ที่เหลือของ `Input_CT` มาจาก query: Vendor จาก `varVendor`, Effective / Valid Date จาก parameter ของ Power Query, Project Name = `CT{ปี}-{ชื่อ Vendor}`, Nego = Final, First Price จาก MasterInfo, Per for Setup = 1 |
+
+ข้อเท็จจริงเพิ่ม: ประเทศผู้ผลิตและเลขทะเบียน อย. อยู่ในฟอร์ม CT แต่ไม่ถูกส่งเข้า `Input_CT` · แถวของ CT ที่ไม่ได้กรอก Method และ PD ไม่มี Combination ID จึงไม่ถูกนับ · ไฟล์เดิมไม่มี Key Date (Baseline คือ First Price) · `factSpending_Raw` ในไฟล์ไม่มีเลข PO และวันที่ PO จึงหา LPP ไม่ได้ ต้องใช้ CSV PO line · สูตร LET ใช้ขั้น FOC ที่**เขียนสุดท้าย** แอปใช้ขั้นที่ซื้อมากสุด (ตรงกันเมื่อเขียนจากน้อยไปมาก)
+
+**ช่องว่างที่พบ:** ทางเดิม (D57 Q7) ของแอปอ่านเฉพาะตาราง `Header` / `Lines` ซึ่งไฟล์จริงไม่มี จึง**อ่านไฟล์ IC จริงไม่ได้** · แก้แล้วใน `costsaving/legacy.py`: อ่านตามกติกาข้างบน ทั้งสองทางเป็น source รูปเดียวกับคอลัมน์ที่กรอกของ `Input_noCT` แล้วผ่าน `ic.run_ic` ชุดเดียวกับ template (First Price ไม่ใช้, D12) · Key Date ผู้ใช้กรอกที่หน้าเว็บ · กฎใหม่ L00 (varCT ไม่ใช่ CT / noCT), L01 (Method / Effective / Valid / Project Name มีหลายค่าในไฟล์เดียว), L02 (CT_Input ไม่ตรงกับตาราง CT = ยังไม่ได้รีเฟรช), L03 (Warning: ข้ามแถว CT ที่ไม่ได้กรอก Method และ PD) · test ใน `tests/test_legacy.py`
+**ช่องว่างที่สอง:** Input Checksum เปลี่ยนเมื่ออ่านไฟล์ IC Processed กลับ (วันที่กลับมาเป็น datetime, 1 กลับมาเป็น 1.0) แก้แล้วด้วย `pipeline.canonical_text`
 
 ### ข้อที่ต้องตัดสินก่อนแก้ (เปลี่ยนตัวเลขปลายทาง)
 

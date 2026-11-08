@@ -28,7 +28,7 @@ PD         ดาวน์โหลด IC Processed ─▶ [โหมด PD, ร
 
 ค่า **ERP System ID** ของ Ariba เป็นค่าของระบบองค์กร จึงไม่อยู่ใน repo ให้พิมพ์ที่แถบด้านข้างทุกครั้ง
 
-ส่วน **ขั้นสูง** ใช้ไฟล์ IC แบบเดิม (ไม่มีแพ็กเกจ) คู่กับไฟล์ master และ CSV PO หรือใช้ไฟล์ master / CSV แทนตารางในแพ็กเกจเพื่อลองแพ็กเกจรุ่นใหม่ (Package Version จะต่อท้ายด้วย `+ CSV`)
+ส่วน **ขั้นสูง** ใช้ไฟล์ IC แบบเดิม (Price_Change_Template ที่คีย์ใน noCT_Input หรือ CT_Vendor + CT_Leadtime + CT_Input ที่รีเฟรชแล้ว อ่านตาม `costsaving/legacy.py` ต้องกรอก Key Date ที่หน้าเว็บ) คู่กับ CSV PO หรือใช้ไฟล์ master / CSV แทนตารางในแพ็กเกจเพื่อลองแพ็กเกจรุ่นใหม่ (Package Version จะต่อท้ายด้วย `+ CSV`)
 
 **ทีมข้อมูล** อัปโหลดไฟล์ master (dimMasterInfo_Raw หรือ MasterInfo_ActiveTH, dimUOM_Raw, dimPlant_Raw, dimPlantGroup) และ CSV PO line เลือก Commodity แล้วกด **สร้าง template** ได้ไฟล์ `IC_Template_{Package Version}.xlsx` นำไปวางใน SharePoint แทนรุ่นเดิม ช่วง spending ค่าเริ่มต้นคือถึง PO Date ล่าสุดในไฟล์ ย้อนหลัง 13 เดือน
 

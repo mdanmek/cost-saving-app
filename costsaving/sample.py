@@ -175,3 +175,114 @@ def template_bytes(header=None, lines=None, leadtime=None, blank=False, spend_fr
         created=datetime(2026, 11, 6, tzinfo=timezone.utc),
     )
     return data
+
+
+# ---------------------------------------------------------------- the current IC file (Price_Change_Template)
+# Same layout as the current file (sheet / table / cell names and the 48 input columns), fictitious values.
+INPUT_COLUMNS = [
+    'Commodity', 'Saving Strategy', 'Method', 'PD', 'Plant Group', 'Material Code', 'Material Description',
+    'Vendor ID', 'Vendor Name', 'MFG', 'Order Unit', 'Order Unit Text', 'ISO Code', 'Conversion', 'Base Unit',
+    'Alternative Material Code', 'Alternative Order Unit', 'a1', 'Per for Setup', 'First Price', 'First FOC',
+    'Nego Price', 'Nego FOC', 'Final Price', 'Final FOC', 'a2', 'First Price Base Unit', 'Nego Price Base Unit',
+    'Final Price Base Unit', 'a3', 'Avoid Base Unit', 'PPV Base Unit', '%PPV Base Unit', 'Expected', 'a4',
+    'Effective Date', 'Valid Date', 'Project Name', 'Local or Import', 'Supplier Product Code',
+    'Supplier Product Name', 'Trade Name', 'TMT Code or UCEP Code', 'Quotation Date', 'Remark', 'a5',
+    'Combination ID', 'Plant List',
+]
+# formula columns of the current file: written as formulas (no cached value), never read by the app
+INPUT_FORMULAS = {
+    'Order Unit Text': '=XLOOKUP(1,1,1)', 'ISO Code': '=XLOOKUP(1,1,1)', 'Conversion': '=XLOOKUP(1,1,1)',
+    'Base Unit': '=XLOOKUP(1,1,1)', 'First Price Base Unit': '=1', 'Nego Price Base Unit': '=1',
+    'Final Price Base Unit': '=1', 'Avoid Base Unit': '=0', 'PPV Base Unit': '=0', '%PPV Base Unit': '=0',
+    'Expected': '="Constant"', 'Combination ID': '="NA"', 'Plant List': '=""',
+}
+CT_FORM_COLUMNS = [
+    'No.', 'Material Code', 'Material Description', 'Order Unit', 'UOM Description', 'a0', 'Final Price', 'Final FOC',
+    'Supplier Product Code', 'Supplier Product Name', 'Trade Name', 'TMT Code or UCEP Code', 'ประเทศผู้ผลิตสินค้า',
+    'Regulatory no. (เลขทะเบียน อย.)', 'Remark', 'Local or Import', 'Quotation Date',
+]
+
+
+def legacy_workbook_bytes(mode='noCT', lines=None, method='Renegotiation', strategy='Negotiation', stale_ct=False):
+    '''The current IC file, keyed as Sourcing does it today (fictitious values).
+    noCT: typed columns of Input_noCT. CT: table CT (vendor form) + CT_Leadtime + Input_CT as refreshed from
+    CT with Method / PD / Plant Group typed in it. stale_ct=True leaves one CT row out of Input_CT.'''
+    from openpyxl import Workbook
+    from openpyxl.workbook.defined_name import DefinedName
+    from openpyxl.worksheet.table import Table
+    from openpyxl.utils import get_column_letter
+    lines = lines or LINES
+    eff, val, quote = date(2026, 12, 1), date(2027, 11, 30), date(2026, 10, 30)
+    vendor_name = {V1: 'Test Vendor A', V2: 'Test Vendor B'}
+    wb = Workbook()
+    summary = wb.active
+    summary.title = 'Summary'
+    summary['B5'] = mode
+    names = {'varCT': 'Summary!$B$5'}
+
+    def table(ws, name, top, columns, rows):
+        for c, col in enumerate(columns, 2):
+            ws.cell(top, c, col)
+        for r, row in enumerate(rows, top + 1):
+            for c, col in enumerate(columns, 2):
+                ws.cell(r, c, row.get(col))
+        last = top + max(len(rows), 1)
+        ws.add_table(Table(displayName=name, ref=f'B{top}:{get_column_letter(len(columns) + 1)}{last}'))
+
+    def input_row(x, ct):
+        vendor = V1 if ct else x.get('vendor', V1)
+        row = {
+            'Method': method, 'PD': x.get('pd'), 'Plant Group': x.get('pg'), 'Material Code': x['mat'],
+            'Material Description': None, 'Vendor ID': vendor, 'Vendor Name': vendor_name[vendor], 'Order Unit': x['uom'],
+            'Alternative Material Code': x.get('ref'), 'Per for Setup': 1 if ct else None,
+            'First Price': 999, 'Nego Price': x['final'] if ct else x.get('nego'),
+            'Nego FOC': x.get('ffoc') if ct else x.get('nfoc'), 'Final Price': x['final'], 'Final FOC': x.get('ffoc'),
+            'Effective Date': eff, 'Valid Date': val,
+            'Project Name': f'CT2026-{vendor_name[V1]}' if ct else 'TEST Renegotiation Vendor A',
+            'Local or Import': 'Local', 'Trade Name': x.get('trade'), 'Quotation Date': quote,
+        }
+        if ct:
+            row.update({'Commodity': 'Medicine', 'Saving Strategy': strategy})
+        for col, formula in INPUT_FORMULAS.items():
+            row[col] = formula
+        if not ct:
+            row.update({'Commodity': '=Commodity', 'Saving Strategy': '=SavingStrategy'})
+        return row
+
+    if mode == 'CT':
+        form = wb.create_sheet('CT_Vendor')
+        form['B2'], form['B4'] = f'{V1}_{vendor_name[V1]}', quote
+        names['varVendor'] = 'CT_Vendor!$B$2'
+        table(form, 'CT', 6, CT_FORM_COLUMNS, [{
+            'No.': i, 'Material Code': x['mat'], 'Order Unit': x['uom'], 'Final Price': x['final'],
+            'Final FOC': x.get('ffoc'), 'Trade Name': x.get('trade'), 'ประเทศผู้ผลิตสินค้า': 'Thailand',
+            'Regulatory no. (เลขทะเบียน อย.)': 'REG-TEST', 'Local or Import': 'Local', 'Quotation Date': '=$B$4',
+        } for i, x in enumerate(lines, 1)])
+        lt = wb.create_sheet('CT_Leadtime')
+        lt['B3'] = '=varVendor'
+        table(lt, 'CT_Leadtime', 6, ['No.', 'Hospital Area', 'Product Type', 'a0', 'Minimum Order (Baht)',
+                                     'Leadtime (Days)', 'Remark'],
+              [{'No.': r[0], 'Hospital Area': r[2], 'Product Type': r[3], 'Minimum Order (Baht)': r[5],
+                'Leadtime (Days)': r[6], 'Remark': r[7]} for r in LEADTIME])
+        ws = wb.create_sheet('CT_Input')
+        ws['D2'], ws['H2'] = strategy, 'Medicine'
+        names.update({'SavingStrategy_CT': 'CT_Input!$D$2', 'Commodity_CT': 'CT_Input!$H$2'})
+        table(ws, 'Input_CT', 5, INPUT_COLUMNS, [input_row(x, True) for x in (lines[1:] if stale_ct else lines)])
+    else:
+        ws = wb.create_sheet('noCT_Input')
+        ws['D2'], ws['G2'] = strategy, 'Medicine'
+        names.update({'SavingStrategy': 'noCT_Input!$D$2', 'Commodity': 'noCT_Input!$G$2'})
+        table(ws, 'Input_noCT', 5, INPUT_COLUMNS, [input_row(x, False) for x in lines])
+    for name, ref in names.items():
+        wb.defined_names[name] = DefinedName(name, attr_text=ref)
+    master = new_workbook()
+    add_master_sheets(master)
+    for src in master.worksheets:  # masters sit in the same file, as in the current IC file
+        dst = wb.create_sheet(src.title)
+        for row in src.iter_rows(values_only=True):
+            dst.append(row)
+        for t in src.tables.values():
+            dst.add_table(Table(displayName=t.displayName, ref=t.ref))
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
