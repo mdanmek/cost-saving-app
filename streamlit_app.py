@@ -236,8 +236,15 @@ def pd_mode():
 
     st.markdown('**3. Agreement ID และเลข Contract ของแต่ละไฟล์** (property ใน SharePoint) '
                 'เลข Contract เว้นว่างได้: แอปหาใน ME3L ด้วย Vendor + Material + Order Unit + ช่วงวันที่ · หลายเลขคั่นด้วย ,')
-    edited = st.data_editor(table, hide_index=True, disabled=['IC File'], key='pd_files', use_container_width=True)
-    edited = table if edited is None else edited
+    # one row of text boxes per file (st.data_editor needs pyarrow, which stlite / Pyodide does not load)
+    typed = []
+    for i, r in enumerate(table.to_dict('records')):
+        c1, c2, c3 = st.columns([3, 2, 3])
+        c1.text(r['IC File'])
+        agreement = c2.text_input('Agreement ID', value=r['Agreement ID'] or '', key=f'pd_agr_{i}_{r["IC File"]}')
+        contract = c3.text_input('SAP Contract No.', value=r['SAP Contract No.'] or '', key=f'pd_con_{i}_{r["IC File"]}')
+        typed.append({'IC File': r['IC File'], 'Agreement ID': agreement, 'SAP Contract No.': contract})
+    edited = pd.DataFrame(typed, columns=['IC File', 'Agreement ID', 'SAP Contract No.'])
 
     signature = (sample_choice, tuple((n, len(d)) for n, d in data_by_name.items()),
                  tuple((k, len(v or b'')) for k, v in reports.items()), len(vt_bytes or b''), tax_plants,
@@ -247,10 +254,10 @@ def pd_mode():
         with st.spinner('กำลังประมวลผล...'):
             ic_files = [(r['IC File'], data_by_name[r['IC File']], r.get('Agreement ID'), r.get('SAP Contract No.'))
                         for r in edited.to_dict('records')]
-            st.session_state['pd_run'] = webui.run_setup_uploads(ic_files, reports, vt_bytes, tax_plants)
+            st.session_state['pd_result'] = webui.run_setup_uploads(ic_files, reports, vt_bytes, tax_plants)
             st.session_state['pd_signature'] = signature
 
-    run = st.session_state.get('pd_run')
+    run = st.session_state.get('pd_result')
     if run is None:
         st.stop()
     stale = st.session_state.get('pd_signature') != signature
