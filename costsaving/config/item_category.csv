@@ -1,0 +1,3 @@
+Item Category,ME1L Text,Info Record Category,Needs Contract,Needs Source List,Allows FOC,Needs Tax Code
+Standard,Standard,0,TRUE,TRUE,TRUE,FALSE
+Consignment,Consignment,2,FALSE,FALSE,FALSE,TRUE

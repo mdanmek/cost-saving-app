@@ -14,7 +14,7 @@
 ทีมข้อมูล   master + CSV PO ─▶ [โหมดทีมข้อมูล] ─▶ template IC + แพ็กเกจ (1 ไฟล์ต่อ commodity) ─▶ SharePoint
 Sourcing   ดาวน์โหลด template ─▶ คีย์ ─▶ [โหมด Sourcing] ─▶ IC Processed, for Contract
            IC Processed ─▶ ยื่นใน SharePoint ─▶ manager approve
-PD         ดาวน์โหลด IC Processed ─▶ [โหมด PD, รอบถัดไป] ─▶ ไฟล์ upload Source List, Info Record, FOC
+PD         IC Processed หลายไฟล์ + ZMMP1004, ZMMR1019, ME1L, ME3L ─▶ [โหมด PD] ─▶ Upload_Check ─▶ ไฟล์ upload Source List (+ ME01), Info Record, FOC 4 ชีต
 ```
 
 **Sourcing**
@@ -29,6 +29,8 @@ PD         ดาวน์โหลด IC Processed ─▶ [โหมด PD, ร
 ค่า **ERP System ID** ของ Ariba เป็นค่าของระบบองค์กร จึงไม่อยู่ใน repo ให้พิมพ์ที่แถบด้านข้างทุกครั้ง
 
 ส่วน **ขั้นสูง** ใช้ไฟล์ IC แบบเดิม (Price_Change_Template: noCT_Input หรือ CT_Input ตามที่ Sourcing แก้หลังรีเฟรช อ่านตาม `costsaving/legacy.py` ต้องกรอก Key Date ที่หน้าเว็บ) คู่กับ CSV PO หรือใช้ไฟล์ master / CSV แทนตารางในแพ็กเกจเพื่อลองแพ็กเกจรุ่นใหม่ (Package Version จะต่อท้ายด้วย `+ CSV`)
+
+**PD** อัปโหลดไฟล์ IC Processed ของรอบนั้น (หลายไฟล์) และรายงาน SAP ปัจจุบัน: ZMMP1004 (Source List, ต้องมี), ZMMR1019 (FOC), ME1L (Info Record: consignment, Purchasing Group, Pl. Deliv. Time), ME3L (Contract) กรอก Agreement ID และเลข Contract ของแต่ละไฟล์ในตาราง (เลข Contract เว้นว่างได้ แอปหาใน ME3L) แล้วกด **ประมวลผล** ดู **Upload_Check**: Error = ห้ามดาวน์โหลดทั้งรอบ (เช่น checksum ไม่ตรง = ไฟล์ถูกแก้หลังประมวลผล), Warning ชนิด Issue = แถวนั้นไม่อยู่ในไฟล์ upload ได้ 4 ไฟล์: Upload_SourceList (Load-SL + ME01 manual), Upload_InfoRecord (Template Info), Upload_FOC (4 ชีต), Upload_Check (+ งานที่ทำเอง) ชื่อหัวคอลัมน์ของรายงาน SAP ตั้งใน `costsaving/config/sap_reports.csv`
 
 **ทีมข้อมูล** อัปโหลดไฟล์ master (dimMasterInfo_Raw หรือ MasterInfo_ActiveTH, dimUOM_Raw, dimPlant_Raw, dimPlantGroup) และ CSV PO line เลือก Commodity แล้วกด **สร้าง template** ได้ไฟล์ `IC_Template_{Package Version}.xlsx` นำไปวางใน SharePoint แทนรุ่นเดิม ช่วง spending ค่าเริ่มต้นคือถึง PO Date ล่าสุดในไฟล์ ย้อนหลัง 13 เดือน
 

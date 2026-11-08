@@ -110,8 +110,8 @@ class FakeStreamlit(types.ModuleType):
     def columns(self, spec):
         return [self] * (spec if isinstance(spec, int) else len(spec))
 
-    def text_input(self, *a, **k):
-        return ''
+    def text_input(self, *a, value='', **k):
+        return value
 
     def radio(self, label, options, **k):
         return options[self.mode if label == 'เลือกโหมด' else self.choice]
@@ -124,6 +124,9 @@ class FakeStreamlit(types.ModuleType):
 
     def date_input(self, *a, **k):
         return None
+
+    def data_editor(self, data, **k):
+        return data
 
     def select_slider(self, label, options, value=None, **k):
         return value
@@ -228,6 +231,27 @@ def test_benchmark_small():
     assert problem is None and n >= 2000 and [k for k, _ in timings][1].startswith('ประมวลผล') and size_mb > 0
 
 
-def test_page_pd_mode_is_a_placeholder(monkeypatch):
+def test_page_pd_mode_waits_for_uploads(monkeypatch):
     fake = run_page(FakeStreamlit(choice=0, mode=2), monkeypatch)
-    assert fake.downloads == [] and not fake.session_state
+    assert fake.downloads == [] and 'pd_result' not in fake.session_state
+
+
+def test_page_pd_mode_sample_enables_the_four_downloads(monkeypatch):
+    fake = run_page(FakeStreamlit(choice=1, mode=2), monkeypatch)
+    assert len(fake.downloads) == 4 and not any(disabled for _, disabled, _ in fake.downloads)
+    assert all(size > 0 for _, _, size in fake.downloads)
+
+
+def test_page_pd_mode_error_disables_downloads(monkeypatch):
+    fake = run_page(FakeStreamlit(choice=2, mode=2), monkeypatch)
+    assert fake.downloads and all(disabled for _, disabled, _ in fake.downloads)
+
+
+def test_widget_keys_are_not_used_as_result_keys():
+    '''Real Streamlit refuses st.session_state[k] = ... when a widget has key=k (found on Pyodide, not by the
+    stand-in): every key written by the page must differ from every widget key.'''
+    import re
+    code = (ROOT / 'streamlit_app.py').read_text(encoding='utf-8')
+    widget_keys = set(re.findall(r"key='([^'{]+)'", code))
+    state_keys = set(re.findall(r"st\.session_state\['([^']+)'\]\s*=", code))
+    assert state_keys and not widget_keys & state_keys

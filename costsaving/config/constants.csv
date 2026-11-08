@@ -14,3 +14,22 @@ Contract,Quantity,999999
 Contract,N/A,N/A
 Contract,Tax Code,[VY] Hospital VAT
 Contract,Item Category,Standard
+Source List,Purchase Org.,1000
+Source List,Fixed vendor,YES
+Source List,Not Fixed vendor,NO
+Source List,Blocked,NO
+Source List,Materials Planning(MRP),1
+Info Record,Purchasing Org,1000
+Info Record,Var. Order Unit,2
+Info Record,Tol. Overdl,0
+Info Record,Conf. Ctr,0003
+Info Record,Currency,THB
+Info Record,Plant Rule Tax Code,V7
+FOC,CalculType,2
+FOC,FreeGoodsCat.,2
+PD,Upload PD Types,"Update,Add"
+PD,No Setup PD Type,No Setup
+PD,Contract Doc Types,ZARB
+PD,SAP Date Format,dd.MM.yyyy
+PD,Existing Info Record PD Types,Update
+PD,New Info Record PD Types,Add

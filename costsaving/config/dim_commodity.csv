@@ -1,3 +1,3 @@
-Commodity,Commodity Code,Setup Code Field,Ariba Commodity,Ariba Item Text Field
-Medicine,MED,Trade Name,A,Trade Name
-Medical Supply,MSP,Supplier Product Code,B,Trade Name
+Commodity,Commodity Code,Setup Code Field,Ariba Commodity,Ariba Item Text Field,Fix Vendor Methods,Default Pl. Deliv. Time,Default Standard Qty,Default Minimum Qty,Default Material Type
+Medicine,MED,Trade Name,A,Trade Name,,4,1,1,ZMED
+Medical Supply,MSP,Supplier Product Code,B,Trade Name,Bidding,6,,,ZMSP

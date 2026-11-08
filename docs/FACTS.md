@@ -62,26 +62,28 @@
 | D62 (Q14) Alternative Material Code / Order Unit | = Reference Material Code / Reference Order Unit ใช้หา LPP และ spending ของรหัสเดิม · W04 เตือนเมื่อ Base Unit ต่างจากรหัสเดิม | `ic.build_agreement_lines`, `ic.summary_lines`, `ic.build_check` | `test_w04_reference_material_with_another_base_unit` |
 | D57 Q1 / Q3 | ดาวน์โหลด 2 ไฟล์ · IC Processed มี `dimPlant_Raw` ต่อท้าย (Q15 สำหรับโหมด PD) | `writers.write_processed` | `test_processed_file_has_inputs_out_pd_and_checksum` |
 
-## 2. โหมด PD
+## 2. โหมด PD (setup) — ทำในเฟส 2 (`costsaving/setup.py`)
 
-แหล่ง logic: `drafts/powerquery/setup_shared.m`, `pd_inputs.m`, `pd_upload_foc.m`, `pd_upload_source_list.m`, `pd_upload_info_record.m` (ร่าง M ยังไม่เคยรัน, D54 ให้เก็บไว้เป็นเอกสารอ้างอิงกติกา) และชีต Expected ของ `pd_test_workbook.xlsx` ที่ `drafts/tools/build_upload_test_workbook.py` สร้าง
+แหล่ง logic: `drafts/powerquery/setup_shared.m`, `pd_inputs.m`, `pd_upload_*.m` (ร่าง M ไม่เคยรัน, D54) และชีต Expected ของ `pd_test_workbook.xlsx` · ข้อมูลสมมติชุดเดียวกันอยู่ใน `costsaving/sample_pd.py`
 
-| Decision | สิ่งที่โค้ดต้องทำ | ที่มาใน M | สถานะ |
+| Decision | สิ่งที่โค้ดทำ | ไฟล์ / ฟังก์ชัน | test |
 |---|---|---|---|
-| D39, D56 | โหมด PD ในหน้าเว็บ: อัปโหลด IC Processed (หนึ่งหรือหลายไฟล์) + รายงาน SAP → Upload_Check → ดาวน์โหลด | `pd_inputs.m` | ยังไม่ทำ (หน้าเว็บมีแค่ข้อความ placeholder) |
-| P16 | Input Checksum ไม่ตรง = Error | — (ใหม่) | ยังไม่ทำ |
-| D52 | upload เฉพาะ PD Type ใน `Upload PD Types` (Update, Add) ที่เหลือเป็น `Upload_PD_Manual` · No Setup ไม่มีงาน | `listUploadPDTypes`, `Upload_PD_Manual` | ยังไม่ทำ |
-| D34, D45 (S1) | Purchase Org 1000 · Source List / Info Record ราย Plant · All Plant แตกเป็นทุก Plant ของ commodity | `fnExpandAllPlant`, `dimPlant_SetupScope` | ยังไม่ทำ · **รายชื่อ Plant มาจากไหนในเว็บ: ดูคำถาม** |
-| D26, D35, D40, D43 | Contract No. + Contract Item ของแต่ละบรรทัด (Contract Match Type: Contract item / Contract only / Ambiguous / Not found / No contract / Not needed) | `Upload_Lines`, `Upload_Contract_Match` | ยังไม่ทำ |
-| Q16, Q21 (ข้อเสนอ) | เลข Contract: ถ้าไม่ได้กรอก ให้จับจาก ME1L ด้วย Vendor + Material + ช่วงวันที่ ถ้าไม่เจอให้ PD พิมพ์เอง · เป็น config | — (ใหม่) | ยังไม่ทำ |
-| D35, D50 (P24) | อ่าน ZMMP1004, ZMMR1019 (หาแถวหัวตารางเอง) และ ME1L | `fnReadSAPReport`, `sap_current_*` | ยังไม่ทำ · **หัวคอลัมน์ของ ME1L ยังไม่รู้ (P24)** |
-| D37, D45 (S2, S3), D50 | Source List: ทั้งชุด Vendor ต่อ Material × Plant · Replace / Keep ตาม `Source List Mode` · Fixed vendor YES / NO · Blocked NO · MRP 1 · ME01 manual เมื่อ Source List เดิมมี Vendor เดียวที่ต้องตัด · ชุดไหนมี Issue ห้าม upload ทั้งชุด | `pd_upload_source_list.m` | ยังไม่ทำ (`dim_method.csv` มี `Source List Mode` แล้ว) |
-| D37, D50 | Info Record ราย Plant: Category 0 / 2, Vendor Material No. = Setup Material No., Telephone = Agreement ID, Conversion เป็นเศษส่วนจำนวนเต็ม, Pl. Deliv. Time (ยา 4 / เวชภัณฑ์ CT_Leadtime ไม่มีใช้ 6), Purchasing Group จาก Material Type, Standard / Minimum Qty (ยา 1 / 1), Tax code ตาม category, วันที่ `dd.MM.yyyy` | `pd_upload_info_record.m` | ยังไม่ทำ · `dim_commodity.csv` ยังไม่มีคอลัมน์ของ PD |
-| D35, D37, D50 | FOC สี่ชีต: Add ต่อขั้น (Scale no. 1, 2, 3), FreeGdsQty = Minimum qty, Base Unit = Order Unit, CalculType / FreeGoodsCat. = 2 · Delete เมื่อยกเลิกของแถม (ค่าจาก ZMMR1019) · เปลี่ยนขั้นไม่ลบ (มากับ Contract ใหม่) · consignment มี FOC = Issue | `pd_upload_foc.m` | ยังไม่ทำ |
-| D46, D28 | consignment ไม่มี Contract / Source List / FOC มีแค่ Info Record category 2 | `cfgItemCategory` | ยังไม่ทำ · **ไฟล์ IC ไม่รู้ consignment (D48, Q13 ค) ต้องมีแหล่งในโหมด PD** |
-| หลักการ (grain) | ทุก join กับรายงาน SAP ต้องไม่ทำให้แถวเพิ่ม · golden test จากชีต Expected | Checks ท้ายแต่ละไฟล์ .m | ยังไม่ทำ |
+| D39, D56, D63 | หน้าเว็บโหมด PD: IC Processed หลายไฟล์ + ZMMP1004, ZMMR1019, ME1L, ME3L (+ ตาราง Tax ของ Vendor ไม่บังคับ) → Upload_Check → ดาวน์โหลด 4 ไฟล์ ประมวลผลในเบราว์เซอร์ ไม่แก้ CSP | `streamlit_app.pd_mode`, `webui.run_setup_uploads` | `test_page_pd_mode_*` |
+| P16, Q5 | Input Checksum ไม่ตรง = Error ห้ามดาวน์โหลด · ไฟล์ที่ไม่ใช่ IC Processed / อัปโหลดซ้ำ / Agreement ID ซ้ำ = Error | `setup.read_processed`, `run_setup` | `test_edited_file_is_an_error_and_blocks_download`, `test_file_that_is_not_processed_is_an_error` |
+| D52, Q6 | upload เฉพาะ PD Type ใน `PD / Upload PD Types` (Update, Add) ที่เหลือ (No Sale / No UOM) เป็น `Upload_PD_Manual` · No Setup ไม่มีงาน | `run_setup` | `test_inactive_and_quit_go_to_the_manual_list` |
+| D26, D35, Q7, Q10 | Contract No. + Item: จับจาก ME3L (Doc Type ใน `PD / Contract Doc Types`) ด้วย Vendor + Material + Order Unit + Plant (ว่าง = ทุก Plant) + ช่วงวันที่ทับกัน · เลขที่ PD พิมพ์ใช้จำกัดผลลัพธ์ · ไม่พบแต่พิมพ์มาเลขเดียว = Contract only (FOC ไปได้ Source List รอ) | `run_setup` | `test_typed_contract_number_restricts_me3l`, `test_contract_found_in_me3l_without_typing` |
+| D34, D45 S1, Q15 | All Plant แตกเป็นทุก Plant ใน `dimPlant_Raw` ของไฟล์ IC Processed (Source List, Info Record) · FOC คงแถวเดียว Plant ว่าง | `run_setup.expand` | `test_ic_processed_from_the_sourcing_mode_is_read_by_the_pd_mode` |
+| D37, D45 S2/S3, D50 | Source List ทั้งชุด Vendor ต่อ Material × Plant · Replace / Keep · Fixed vendor YES / NO · Blocked NO · MRP 1 · ME01 manual · ชุดมี Issue รอทั้งชุด | `setup._source_list` | `test_source_list`, `test_kept_vendor_waits_with_its_set` |
+| D37, D50, Q11, Q16, Q17 | Info Record ราย Plant: category จาก ME1L (consignment = 2), Purchasing Group / Pl. Deliv. Time / Minimum Qty จาก ME1L ถ้าไม่มีใช้ค่าตั้งต้นของ commodity, Tax code ตาม category + ตาราง Vendor Tax + Plant ที่ PD พิมพ์, คีย์ชนกันจากหลายไฟล์ใช้ Effective Date ล่าสุด (D23) | `setup._info_record` | `test_info_record`, `test_same_info_record_in_two_files_keeps_the_latest_effective_date` |
+| D35, D37, D50 | FOC สี่ชีต: Add ต่อขั้น, Delete เมื่อยกเลิก (ค่าจาก ZMMR1019), เปลี่ยนขั้นไม่ลบ, consignment มี FOC = E09 | `setup._foc_add`, `setup._foc_delete` | `test_foc_add`, `test_foc_delete_only_when_cancelled` |
+| grain | ทุก join ใช้ key ที่ไม่ซ้ำ: ME3L ตัดซ้ำที่ Contract × Item, ZMMP1004 ที่ Material × Plant × Vendor × Valid from, ME1L ใช้แถวแรก (Note) · รายงานซ้ำสองเท่าได้ผลเท่าเดิม | `run_setup` | `test_duplicate_report_rows_do_not_add_upload_rows` · golden: `test_row_counts_match_expected_sheet` (FOC 4/1/1/0, Source List 9, ME01 1, Info Record 15) |
+| P24 | ชื่อหัวคอลัมน์ของรายงาน SAP อยู่ใน `config/sap_reports.csv` แก้ได้ไม่ต้องแก้โค้ด หาแถวหัวตารางเอง | `setup.read_sap_report` | `test_me3l_ignores_purchase_orders_and_reads_after_title_rows` |
 
-grain ที่จะใช้ (จาก M และ data-contract 6.4): Out_PD = Line × Plant scope · Source List upload = Material × Plant × Vendor · Info Record = Supplier × Material × Plant × Category · FOC = Contract × Material × (Plant หรือว่าง) × Order Unit × Valid from × Scale no. · ZMMP1004 = Material × Plant × Vendor × Valid from · ZMMR1019 = Contract × Material × Plant × Order Unit × Valid from × Scale no. · ME1L = Contract × Contract Item
+รีวิว #7 (2026-11-08): บรรทัด By Plant ที่ไม่มีรหัส Plant ไม่ออกเป็น Info Record / FOC แบบไม่มี Plant · Source List หนึ่ง Vendor fix ต่อ Material × Plant และหนึ่งแถวต่อ Vendor · ไฟล์ที่ขาด Header / Lines เป็น Error ของไฟล์นั้น · ความเร็ว: ME3L ทำ index ตาม Vendor × Material × Order Unit รอบสมมติ 40 ไฟล์ × 100 บรรทัด กับรายงานละ 40,000 แถว จาก 64 เหลือ 10 วินาทีบน CPython (ผลเท่าเดิม)
+
+Upload_Check: **Error** = ทั้งรอบห้ามดาวน์โหลด · **Warning** แยกชนิด `Issue` (แถวนี้ไม่อยู่ในไฟล์ upload), `Manual` (PD ทำเอง), `Note` (แถวไปได้ แต่มีช่องที่ต้องตรวจ)
+
+ยังไม่ได้ทำ / รอ: template ไฟล์ upload สำหรับงาน inactive (Q6 ข), P25 Standard / Minimum Qty ของเวชภัณฑ์, C11 Registration Type / Special Feature, ชื่อหัวคอลัมน์จริงของ Info Record template คอลัมน์ O / P (setup-outputs เขียนแบบย่อ)
 
 ## 3. เอกสารที่ล้าสมัยหรือขัดกัน (ยึด decision ล่าสุด)
 

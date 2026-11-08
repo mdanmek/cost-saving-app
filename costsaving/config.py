@@ -19,7 +19,10 @@ BOOL_COLUMNS = {
     'dim_calc_type': ['Match Vendor', 'Match Order Unit', 'Prorate by Duration', 'Split by Winner'],
     'dim_pd': ['is Collect Cost Saving', 'Fix Vendor', 'Needs Contract', 'Needs Price'],
     'dim_combination': ['is Collect Cost Saving'],
+    'item_category': ['Needs Contract', 'Needs Source List', 'Allows FOC', 'Needs Tax Code'],
 }
+# tables read as text only (PD setup mode)
+TEXT_TABLES = ['dim_commodity', 'dim_strategy_method', 'purchasing_group', 'tax_code_map', 'sap_reports']
 
 
 def is_blank(value):
@@ -90,6 +93,10 @@ class Config:
     dim_strategy_method: pd.DataFrame
     dim_pd: pd.DataFrame
     dim_combination: pd.DataFrame
+    item_category: pd.DataFrame = None
+    purchasing_group: pd.DataFrame = None
+    tax_code_map: pd.DataFrame = None
+    sap_reports: pd.DataFrame = None
     constants: dict = field(default_factory=dict)
 
     def const(self, group, name):
@@ -101,11 +108,15 @@ class Config:
     def const_number(self, group, name):
         return float(self.const(group, name))
 
+    def const_list(self, group, name):
+        '''"Update,Add" → ['Update', 'Add']'''
+        return [x.strip() for x in (self.const(group, name) or '').split(',') if x.strip()]
+
 
 def load_config(config_dir=CONFIG_DIR, overrides=None):
     '''Read the config CSVs. overrides = {(group, field): value} for values the user passes in.'''
     tables = {}
-    for name in BOOL_COLUMNS.keys() | {'dim_commodity', 'dim_strategy_method'}:
+    for name in BOOL_COLUMNS.keys() | set(TEXT_TABLES):
         df = pd.read_csv(Path(config_dir) / f'{name}.csv', dtype=str, keep_default_na=False)
         df = df.map(clean)
         for col in BOOL_COLUMNS.get(name, []):
